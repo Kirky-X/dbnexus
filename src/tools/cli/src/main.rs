@@ -776,16 +776,25 @@ async fn create_migration(description: &str, directory: &Path) -> DbResult<()> {
     let filepath = directory.join(&filename);
 
     let migration_content = format!(
-        r#"-- Migration: {description}
--- Version: {timestamp}
--- Created: {created_at}
+        r#"-- {migration}: {description}
+-- {version}: {timestamp}
+-- {created}: {created_at}
 
--- UP: Apply migration
--- Your migration SQL goes here
+-- {up_label}: {up_value}
+{up_placeholder}
 
--- DOWN: Rollback migration
--- Reversal of migration SQL goes here
+-- {down_label}: {down_value}
+{down_placeholder}
 "#,
+        migration = i18n::tr("cli-migration-hdr-migration"),
+        version = i18n::tr("cli-migration-hdr-version"),
+        created = i18n::tr("cli-migration-hdr-created"),
+        up_label = i18n::tr("cli-migration-hdr-up"),
+        up_value = i18n::tr("cli-migration-hdr-apply"),
+        up_placeholder = i18n::tr("cli-schema-diff-up-placeholder"),
+        down_label = i18n::tr("cli-migration-hdr-down"),
+        down_value = i18n::tr("cli-migration-hdr-rollback"),
+        down_placeholder = i18n::tr("cli-schema-diff-down-placeholder"),
         description = description,
         timestamp = timestamp,
         created_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
@@ -1422,17 +1431,26 @@ async fn generate_migration(
         let diff_sql = generate_schema_diff_sql(&from_content, &to_content)?;
 
         migration_content = format!(
-            r#"-- Migration: {description}
--- Version: {timestamp}
--- Created: {created_at}
--- Type: Auto-generated from schema diff
+            r#"-- {migration}: {description}
+-- {version}: {timestamp}
+-- {created}: {created_at}
+-- {type_label}: {type_value}
 
--- UP: Apply migration
+-- {up_label}: {up_value}
 {up_sql}
 
--- DOWN: Rollback migration
+-- {down_label}: {down_value}
 {down_sql}
 "#,
+            migration = i18n::tr("cli-migration-hdr-migration"),
+            version = i18n::tr("cli-migration-hdr-version"),
+            created = i18n::tr("cli-migration-hdr-created"),
+            type_label = i18n::tr("cli-migration-hdr-type"),
+            type_value = i18n::tr("cli-migration-hdr-type-auto"),
+            up_label = i18n::tr("cli-migration-hdr-up"),
+            up_value = i18n::tr("cli-migration-hdr-apply"),
+            down_label = i18n::tr("cli-migration-hdr-down"),
+            down_value = i18n::tr("cli-migration-hdr-rollback"),
             description = description,
             timestamp = timestamp,
             created_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"),
@@ -1443,17 +1461,28 @@ async fn generate_migration(
         println!("✓ {}", i18n::t_simple("cli-schema-diff-generated"));
     } else {
         migration_content = format!(
-            r#"-- Migration: {description}
--- Version: {timestamp}
--- Created: {created_at}
--- Type: Manual migration
+            r#"-- {migration}: {description}
+-- {version}: {timestamp}
+-- {created}: {created_at}
+-- {type_label}: {type_value}
 
--- UP: Apply migration
--- Your migration SQL goes here
+-- {up_label}: {up_value}
+{up_placeholder}
 
--- DOWN: Rollback migration
--- Reversal of migration SQL goes here
+-- {down_label}: {down_value}
+{down_placeholder}
 "#,
+            migration = i18n::tr("cli-migration-hdr-migration"),
+            version = i18n::tr("cli-migration-hdr-version"),
+            created = i18n::tr("cli-migration-hdr-created"),
+            type_label = i18n::tr("cli-migration-hdr-type"),
+            type_value = i18n::tr("cli-migration-hdr-type-manual"),
+            up_label = i18n::tr("cli-migration-hdr-up"),
+            up_value = i18n::tr("cli-migration-hdr-apply"),
+            up_placeholder = i18n::tr("cli-schema-diff-up-placeholder"),
+            down_label = i18n::tr("cli-migration-hdr-down"),
+            down_value = i18n::tr("cli-migration-hdr-rollback"),
+            down_placeholder = i18n::tr("cli-schema-diff-down-placeholder"),
             description = description,
             timestamp = timestamp,
             created_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
@@ -1509,8 +1538,13 @@ struct DiffSql {
 /// 从 Schema JSON 文件解析 Schema（反序列化后重建表索引）
 #[cfg(feature = "migration")]
 fn parse_schema_file(content: &str, file: &str) -> DbResult<dbnexus::domain::migration::Schema> {
-    let mut schema: dbnexus::domain::migration::Schema = serde_json::from_str(content)
-        .map_err(|e| DbError::Config(format!("invalid schema file {file}: {e}")))?;
+    let mut schema: dbnexus::domain::migration::Schema =
+        serde_json::from_str(content).map_err(|e| {
+            DbError::Config(i18n::t(
+                "cli-invalid-schema-file",
+                &[("file", file.to_string()), ("error", e.to_string())],
+            ))
+        })?;
     schema.rebuild_index();
     Ok(schema)
 }
@@ -1713,8 +1747,12 @@ async fn load_schema_side(spec: &str) -> DbResult<(String, dbnexus::domain::migr
         let schema = dbnexus::domain::migration::introspect_schema(&conn, backend).await?;
         Ok((spec.to_string(), schema))
     } else {
-        let content = fs::read_to_string(spec)
-            .map_err(|e| DbError::Config(format!("cannot read schema file {spec}: {e}")))?;
+        let content = fs::read_to_string(spec).map_err(|e| {
+            DbError::Config(i18n::t(
+                "cli-cannot-read-schema-file",
+                &[("spec", spec.to_string()), ("error", e.to_string())],
+            ))
+        })?;
         Ok((spec.to_string(), parse_schema_file(&content, spec)?))
     }
 }
@@ -2116,7 +2154,10 @@ async fn run_mcp_serve() -> ExitCode {
         }
     };
     if let Err(e) = service.waiting().await {
-        eprintln!("mcp serve error: {e}");
+        eprintln!(
+            "{}",
+            i18n::t("cli-mcp-serve-error", &[("error", e.to_string())])
+        );
         return ExitCode::RuntimeFailure;
     }
     ExitCode::Ok

@@ -150,7 +150,7 @@ impl EntityEventBus for InMemoryEntityEventBus {
         senders.retain(|tx| !tx.is_closed());
         for tx in senders.iter() {
             tx.send(event.clone())
-                .map_err(|_| DbError::Config("entity event subscriber dropped".to_string()))?;
+                .map_err(|_| DbError::Config(crate::i18n::tr("entity-event-subscriber-dropped")))?;
         }
         Ok(())
     }

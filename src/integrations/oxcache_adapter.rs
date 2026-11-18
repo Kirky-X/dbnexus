@@ -62,10 +62,12 @@ impl DbCacheProvider for OxcacheDbCacheAdapter {
         key: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
         Box::pin(async move {
-            self.cache
-                .get(key)
-                .await
-                .map_err(|e| DbError::Cache(format!("cache get failed: {e}")))
+            self.cache.get(key).await.map_err(|e| {
+                DbError::Cache(crate::i18n::t(
+                    "cache-get-failed",
+                    &[("error", e.to_string())],
+                ))
+            })
         })
     }
 
@@ -79,7 +81,12 @@ impl DbCacheProvider for OxcacheDbCacheAdapter {
             self.cache
                 .set(key.into(), Arc::new(value), ttl)
                 .await
-                .map_err(|e| DbError::Cache(format!("cache set failed: {e}")))
+                .map_err(|e| {
+                    DbError::Cache(crate::i18n::t(
+                        "cache-set-failed",
+                        &[("error", e.to_string())],
+                    ))
+                })
         })
     }
 
@@ -88,10 +95,12 @@ impl DbCacheProvider for OxcacheDbCacheAdapter {
         key: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
         Box::pin(async move {
-            self.cache
-                .delete(key)
-                .await
-                .map_err(|e| DbError::Cache(format!("cache delete failed: {e}")))
+            self.cache.delete(key).await.map_err(|e| {
+                DbError::Cache(crate::i18n::t(
+                    "cache-delete-failed",
+                    &[("error", e.to_string())],
+                ))
+            })
         })
     }
 }

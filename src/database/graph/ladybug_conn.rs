@@ -38,6 +38,7 @@ use crate::database::graph::{
     GraphTransaction, GraphValue,
 };
 use crate::foundation::{DbError, DbResult};
+use crate::i18n;
 
 /// Ladybug 图数据库连接
 ///
@@ -91,13 +92,14 @@ impl LadybugConnection {
         let db_path = Self::parse_url(url);
         // 路径遍历校验：拒绝包含 .. 的路径，防止打开任意文件
         if db_path != ":memory:" && db_path.contains("..") {
-            return Err(DbError::Connection(sea_orm::DbErr::Custom(
-                "ladybug database path contains path traversal characters '..': rejected for security".to_string(),
-            )));
+            return Err(DbError::Connection(sea_orm::DbErr::Custom(i18n::tr(
+                "ladybug-path-traversal-rejected",
+            ))));
         }
         let db = lbug::Database::new(&db_path, lbug::SystemConfig::default()).map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                "ladybug Database::new failed: {e}"
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "ladybug-database-new-failed",
+                &[("error", e.to_string())],
             )))
         })?;
         Ok(Self {
@@ -134,7 +136,7 @@ impl LadybugConnection {
     /// 获取 Semaphore 许可证，限制 spawn_blocking 并发数
     async fn acquire_permit(&self) -> DbResult<tokio::sync::SemaphorePermit<'_>> {
         self.spawn_permit.acquire().await.map_err(|_| {
-            DbError::Connection(sea_orm::DbErr::Custom("Semaphore closed".to_string()))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::tr("ladybug-semaphore-closed")))
         })
     }
 }
@@ -159,14 +161,18 @@ impl GraphConnection for LadybugConnection {
         let handle: JoinHandle<DbResult<GraphExecResult>> =
             tokio::task::spawn_blocking(move || {
                 let conn = lbug::Connection::new(&db).map_err(|e| {
-                    DbError::Connection(sea_orm::DbErr::Custom(format!(
-                        "ladybug Connection::new: {e}"
+                    DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                        "ladybug-connection-new-failed",
+                        &[("error", e.to_string())],
                     )))
                 })?;
                 execute_cypher_on_conn(&conn, &cypher_owned)
             });
         let result = handle.await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join: {e}")))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "ladybug-spawn-blocking-join-failed",
+                &[("error", e.to_string())],
+            )))
         })?;
         drop(permit);
         result
@@ -187,14 +193,18 @@ impl GraphConnection for LadybugConnection {
         let handle: JoinHandle<DbResult<GraphExecResult>> =
             tokio::task::spawn_blocking(move || {
                 let conn = lbug::Connection::new(&db).map_err(|e| {
-                    DbError::Connection(sea_orm::DbErr::Custom(format!(
-                        "ladybug Connection::new: {e}"
+                    DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                        "ladybug-connection-new-failed",
+                        &[("error", e.to_string())],
                     )))
                 })?;
                 execute_cypher_with_params_on_conn(&conn, &cypher_owned, &params)
             });
         let result = handle.await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join: {e}")))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "ladybug-spawn-blocking-join-failed",
+                &[("error", e.to_string())],
+            )))
         })?;
         drop(permit);
         result
@@ -205,7 +215,7 @@ impl GraphConnection for LadybugConnection {
         match result {
             GraphExecResult::Query(q) if !q.rows.is_empty() => Ok(()),
             GraphExecResult::Query(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
-                "ladybug health check returned no rows".to_string(),
+                i18n::tr("ladybug-health-check-no-rows"),
             ))),
             GraphExecResult::Write { .. } => Ok(()),
         }
@@ -219,7 +229,7 @@ impl GraphConnection for LadybugConnection {
             .acquire_owned()
             .await
             .map_err(|_| {
-                DbError::Connection(sea_orm::DbErr::Custom("Semaphore closed".to_string()))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::tr("ladybug-semaphore-closed")))
             })?;
 
         let db = self.db.clone();
@@ -227,13 +237,15 @@ impl GraphConnection for LadybugConnection {
 
         let handle: JoinHandle<DbResult<()>> = tokio::task::spawn_blocking(move || {
             let conn = lbug::Connection::new(&db).map_err(|e| {
-                DbError::Connection(sea_orm::DbErr::Custom(format!(
-                    "ladybug txn Connection::new: {e}"
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                    "ladybug-txn-connection-new-failed",
+                    &[("error", e.to_string())],
                 )))
             })?;
             conn.query("BEGIN TRANSACTION").map_err(|e| {
-                DbError::Connection(sea_orm::DbErr::Custom(format!(
-                    "ladybug BEGIN TRANSACTION: {e}"
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                    "ladybug-begin-transaction-failed",
+                    &[("error", e.to_string())],
                 )))
             })?;
 
@@ -253,8 +265,9 @@ impl GraphConnection for LadybugConnection {
                     }
                     TxnCommand::Commit { reply } => {
                         let result = conn.query("COMMIT").map(|_| ()).map_err(|e| {
-                            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                                "ladybug COMMIT: {e}"
+                            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                                "ladybug-commit-failed",
+                                &[("error", e.to_string())],
                             )))
                         });
                         let _ = reply.send(result);
@@ -262,8 +275,9 @@ impl GraphConnection for LadybugConnection {
                     }
                     TxnCommand::Rollback { reply } => {
                         let result = conn.query("ROLLBACK").map(|_| ()).map_err(|e| {
-                            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                                "ladybug ROLLBACK: {e}"
+                            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                                "ladybug-rollback-failed",
+                                &[("error", e.to_string())],
                             )))
                         });
                         let _ = reply.send(result);
@@ -351,12 +365,14 @@ impl GraphTransaction for LadybugTransaction {
             .send(TxnCommand::Commit { reply: reply_tx })
             .await
             .map_err(|_| {
-                DbError::Connection(sea_orm::DbErr::Custom(
-                    "txn thread already closed".to_string(),
-                ))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::tr(
+                    "ladybug-txn-thread-closed",
+                )))
             })?;
         let result = reply_rx.await.map_err(|_| {
-            DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string()))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::tr(
+                "ladybug-txn-reply-dropped",
+            )))
         })?;
         // 等待 blocking 线程退出
         if let Some(handle) = self.handle.take() {
@@ -371,12 +387,14 @@ impl GraphTransaction for LadybugTransaction {
             .send(TxnCommand::Rollback { reply: reply_tx })
             .await
             .map_err(|_| {
-                DbError::Connection(sea_orm::DbErr::Custom(
-                    "txn thread already closed".to_string(),
-                ))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::tr(
+                    "ladybug-txn-thread-closed",
+                )))
             })?;
         let result = reply_rx.await.map_err(|_| {
-            DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string()))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::tr(
+                "ladybug-txn-reply-dropped",
+            )))
         })?;
         if let Some(handle) = self.handle.take() {
             let _ = handle.await;
@@ -393,12 +411,14 @@ impl GraphTransaction for LadybugTransaction {
             })
             .await
             .map_err(|_| {
-                DbError::Connection(sea_orm::DbErr::Custom(
-                    "txn thread already closed".to_string(),
-                ))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::tr(
+                    "ladybug-txn-thread-closed",
+                )))
             })?;
         reply_rx.await.map_err(|_| {
-            DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string()))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::tr(
+                "ladybug-txn-reply-dropped",
+            )))
         })?
     }
 
@@ -420,12 +440,14 @@ impl GraphTransaction for LadybugTransaction {
             })
             .await
             .map_err(|_| {
-                DbError::Connection(sea_orm::DbErr::Custom(
-                    "txn thread already closed".to_string(),
-                ))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::tr(
+                    "ladybug-txn-thread-closed",
+                )))
             })?;
         reply_rx.await.map_err(|_| {
-            DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string()))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::tr(
+                "ladybug-txn-reply-dropped",
+            )))
         })?
     }
 }
@@ -434,9 +456,12 @@ impl GraphTransaction for LadybugTransaction {
 
 /// 在 blocking 线程内通过指定 Connection 执行 Cypher 查询
 fn execute_cypher_on_conn(conn: &lbug::Connection, cypher: &str) -> DbResult<GraphExecResult> {
-    let mut result = conn
-        .query(cypher)
-        .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug query: {e}"))))?;
+    let mut result = conn.query(cypher).map_err(|e| {
+        DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+            "ladybug-query-failed",
+            &[("error", e.to_string())],
+        )))
+    })?;
     let column_names = result.get_column_names();
     let num_tuples = result.get_num_tuples();
     let mut rows = Vec::with_capacity(num_tuples as usize);
@@ -465,7 +490,10 @@ fn execute_cypher_with_params_on_conn(
     params: &HashMap<String, serde_json::Value>,
 ) -> DbResult<GraphExecResult> {
     let mut prepared = conn.prepare(cypher).map_err(|e| {
-        DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug prepare: {e}")))
+        DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+            "ladybug-prepare-failed",
+            &[("error", e.to_string())],
+        )))
     })?;
 
     // 将 serde_json::Value 转换为 lbug::Value（按 (key, value) 对的 vec 传入）
@@ -475,8 +503,9 @@ fn execute_cypher_with_params_on_conn(
         .collect();
 
     let mut result = conn.execute(&mut prepared, lbug_params).map_err(|e| {
-        DbError::Connection(sea_orm::DbErr::Custom(format!(
-            "ladybug execute (prepared): {e}"
+        DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+            "ladybug-execute-prepared-failed",
+            &[("error", e.to_string())],
         )))
     })?;
 

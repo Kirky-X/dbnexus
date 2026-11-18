@@ -306,7 +306,7 @@ impl PermissionConfig {
         let mut errors = Vec::new();
 
         if self.roles.is_empty() {
-            errors.push("No roles defined in permission config".to_string());
+            errors.push(crate::i18n::tr("perm-no-roles-defined"));
         }
 
         for (role_name, policy) in &self.roles {

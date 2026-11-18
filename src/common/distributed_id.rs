@@ -128,7 +128,10 @@ impl SnowflakeIdGenerator {
     /// machine_id 超过 1023 时返回错误
     pub fn new(machine_id: u32, epoch: u64) -> Result<Self, String> {
         if machine_id > 1023 {
-            return Err(format!("machine_id must be 0-1023, got {machine_id}"));
+            return Err(crate::i18n::t(
+                "snowflake-machine-id-invalid",
+                &[("machine_id", machine_id.to_string())],
+            ));
         }
         Ok(Self {
             machine_id,

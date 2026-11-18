@@ -932,14 +932,14 @@ impl MigrationExecutor {
             // DuckDB 连接在 as_sea_orm 处被拒绝，走不到 MigrationExecutor；
             // 显式报错，避免生成误导性的 Postgres 占位符 SQL
             DatabaseType::DuckDb => {
-                return Err(DbError::Config(
-                    "DuckDB connections do not support SeaORM-based migration rollback".to_string(),
-                ));
+                return Err(DbError::Config(crate::i18n::tr(
+                    "migration-duckdb-rollback-unsupported",
+                )));
             }
             DatabaseType::Ladybug | DatabaseType::Neo4j => {
-                return Err(DbError::Config(
-                    "Graph databases do not participate in relational migrations".to_string(),
-                ));
+                return Err(DbError::Config(crate::i18n::tr(
+                    "migration-graph-not-relational",
+                )));
             }
         };
 
@@ -1015,9 +1015,7 @@ impl MigrationFileParser {
                 .any(|stmt| content.to_uppercase().contains(stmt));
 
             if !contains_sql {
-                return Err(
-                    "Migration file does not contain recognizable SQL statements".to_string(),
-                );
+                return Err(crate::i18n::tr("migration-no-recognizable-sql"));
             }
         }
 

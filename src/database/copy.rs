@@ -98,9 +98,7 @@ impl CopyStatement {
             cols.push(c.clone());
         }
         if cols.is_empty() {
-            return Err(DbError::Config(
-                "COPY requires at least one column (MVP contract)".to_string(),
-            ));
+            return Err(DbError::Config(crate::i18n::tr("copy-requires-column-mvp")));
         }
         Ok(Self {
             table: table.to_string(),
@@ -598,9 +596,9 @@ impl crate::database::DbPool {
     ) -> crate::foundation::DbResult<u64> {
         // 空行集是调用方错误：COPY 空集无意义，直接拒绝（两条传输路径同契约）
         if rows.is_empty() {
-            return Err(crate::foundation::DbError::Config(
-                "copy_in requires at least one row".to_string(),
-            ));
+            return Err(crate::foundation::DbError::Config(crate::i18n::tr(
+                "copy-in-requires-row",
+            )));
         }
 
         #[cfg(feature = "postgres")]

@@ -148,3 +148,20 @@ cli-help-user-add-username = Username (1-64 letters/digits/_.-)
 cli-help-user-add-password = Password (stored as salted SHA-256 digest, MVP; production should use authentication bcrypt)
 cli-help-user-add-role = Role (1-64 letters/digits/_-, default admin)
 cli-help-user-remove-username = Username
+
+
+# --- Stage 1: generated migration file header labels (canonical English
+# mirrors of the literals previously embedded in the CLI templates) ---
+cli-migration-hdr-migration = Migration
+cli-migration-hdr-version = Version
+cli-migration-hdr-created = Created
+cli-migration-hdr-type = Type
+cli-migration-hdr-type-auto = Auto-generated from schema diff
+cli-migration-hdr-type-manual = Manual migration
+cli-migration-hdr-up = UP
+cli-migration-hdr-down = DOWN
+cli-migration-hdr-apply = Apply migration
+cli-migration-hdr-rollback = Rollback migration
+cli-invalid-schema-file = invalid schema file { $file }: { $error }
+cli-cannot-read-schema-file = cannot read schema file { $spec }: { $error }
+cli-mcp-serve-error = mcp serve error: { $error }

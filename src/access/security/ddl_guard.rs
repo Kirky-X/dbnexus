@@ -255,9 +255,9 @@ impl DdlGuard {
         })?;
 
         if statements.is_empty() {
-            return Ok(DdlValidationResult::Forbidden(
-                "Empty SQL statement after parsing".to_string(),
-            ));
+            return Ok(DdlValidationResult::Forbidden(crate::i18n::tr(
+                "sql-empty-after-parsing",
+            )));
         }
 
         for stmt in &statements {

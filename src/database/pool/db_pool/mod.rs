@@ -89,17 +89,29 @@ impl DbConnection {
         match self {
             DbConnection::SeaOrm(conn) => Ok(conn),
             #[cfg(feature = "duckdb")]
-            DbConnection::DuckDb(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
-                "Operation requires SeaORM connection but got DuckDb".to_string(),
-            ))),
+            DbConnection::DuckDb(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "pool-requires-connection",
+                &[
+                    ("expected", "SeaORM".to_string()),
+                    ("actual", "DuckDb".to_string()),
+                ],
+            )))),
             #[cfg(feature = "ladybug")]
-            DbConnection::Ladybug(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
-                "Operation requires SeaORM connection but got Ladybug".to_string(),
-            ))),
+            DbConnection::Ladybug(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "pool-requires-connection",
+                &[
+                    ("expected", "SeaORM".to_string()),
+                    ("actual", "Ladybug".to_string()),
+                ],
+            )))),
             #[cfg(feature = "neo4j")]
-            DbConnection::Neo4j(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
-                "Operation requires SeaORM connection but got Neo4j".to_string(),
-            ))),
+            DbConnection::Neo4j(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "pool-requires-connection",
+                &[
+                    ("expected", "SeaORM".to_string()),
+                    ("actual", "Neo4j".to_string()),
+                ],
+            )))),
         }
     }
 
@@ -108,17 +120,29 @@ impl DbConnection {
     pub fn as_duckdb(&self) -> DbResult<&crate::database::DuckDbConnection> {
         match self {
             DbConnection::DuckDb(conn) => Ok(conn),
-            DbConnection::SeaOrm(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
-                "Operation requires DuckDb connection but got SeaOrm".to_string(),
-            ))),
+            DbConnection::SeaOrm(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "pool-requires-connection",
+                &[
+                    ("expected", "DuckDb".to_string()),
+                    ("actual", "SeaOrm".to_string()),
+                ],
+            )))),
             #[cfg(feature = "ladybug")]
-            DbConnection::Ladybug(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
-                "Operation requires DuckDb connection but got Ladybug".to_string(),
-            ))),
+            DbConnection::Ladybug(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "pool-requires-connection",
+                &[
+                    ("expected", "DuckDb".to_string()),
+                    ("actual", "Ladybug".to_string()),
+                ],
+            )))),
             #[cfg(feature = "neo4j")]
-            DbConnection::Neo4j(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
-                "Operation requires DuckDb connection but got Neo4j".to_string(),
-            ))),
+            DbConnection::Neo4j(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "pool-requires-connection",
+                &[
+                    ("expected", "DuckDb".to_string()),
+                    ("actual", "Neo4j".to_string()),
+                ],
+            )))),
         }
     }
 
@@ -134,13 +158,21 @@ impl DbConnection {
             DbConnection::Ladybug(conn) => Ok(conn.as_ref()),
             #[cfg(feature = "neo4j")]
             DbConnection::Neo4j(conn) => Ok(conn.as_ref()),
-            DbConnection::SeaOrm(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
-                "Operation requires graph connection but got SeaOrm".to_string(),
-            ))),
+            DbConnection::SeaOrm(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "pool-requires-connection",
+                &[
+                    ("expected", "graph".to_string()),
+                    ("actual", "SeaOrm".to_string()),
+                ],
+            )))),
             #[cfg(feature = "duckdb")]
-            DbConnection::DuckDb(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
-                "Operation requires graph connection but got DuckDb".to_string(),
-            ))),
+            DbConnection::DuckDb(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "pool-requires-connection",
+                &[
+                    ("expected", "graph".to_string()),
+                    ("actual", "DuckDb".to_string()),
+                ],
+            )))),
         }
     }
 

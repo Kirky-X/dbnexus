@@ -220,7 +220,7 @@ impl SchemaDiffer {
     /// 计算差异并生成 Migration
     pub fn diff(&self) -> Vec<Migration> {
         let mut migrations = Vec::new();
-        let mut migration = Migration::new(1, "Schema changes".to_string());
+        let mut migration = Migration::new(1, crate::i18n::tr("migration-default-description"));
 
         // 检测新增的表
         for new_table in &self.new_schema.tables {

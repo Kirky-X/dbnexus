@@ -125,7 +125,10 @@ impl RetentionExecutor {
         time_column: &str,
     ) -> DbResult<Self> {
         if !is_safe_identifier(table) {
-            return Err(DbError::Config(format!("unsafe retention table: {table}")));
+            return Err(DbError::Config(crate::i18n::t(
+                "retention-unsafe-table",
+                &[("table", table.to_string())],
+            )));
         }
         if !is_safe_identifier(time_column) {
             return Err(DbError::Config(format!(
@@ -133,7 +136,7 @@ impl RetentionExecutor {
             )));
         }
         if role.trim().is_empty() {
-            return Err(DbError::Config("retention role is required".into()));
+            return Err(DbError::Config(crate::i18n::tr("retention-role-required")));
         }
         Ok(Self {
             pool,

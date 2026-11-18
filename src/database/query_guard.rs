@@ -141,10 +141,9 @@ pub fn parse_plan_signal(backend: DatabaseType, plan: &serde_json::Value) -> DbR
 
 fn parse_sqlite_plan(plan: &serde_json::Value) -> DbResult<PlanSignal> {
     // 输入：{ "detail": "SCAN t" } 或 { "detail": "SEARCH t USING INDEX idx" }
-    let detail = plan
-        .get("detail")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| DbError::Config("sqlite plan missing detail".into()))?;
+    let detail = plan.get("detail").and_then(|v| v.as_str()).ok_or_else(|| {
+        DbError::Config(crate::i18n::tr("query-guard-sqlite-plan-missing-detail"))
+    })?;
     let uses_index = detail.contains("USING INDEX");
     let full_scan = detail.contains("SCAN") && !uses_index;
     Ok(PlanSignal {

@@ -156,19 +156,22 @@ impl CacheConfig {
     /// 任何 capacity 为 0 时返回 `ConfigError::InvalidCacheCapacity`
     pub fn validate(&self) -> Result<(), ConfigError> {
         if self.policy_cache_capacity == 0 {
-            return Err(ConfigError::InvalidCacheCapacity(
-                "policy_cache_capacity must be > 0".to_string(),
-            ));
+            return Err(ConfigError::InvalidCacheCapacity(crate::i18n::t(
+                "config-capacity-must-be-positive",
+                &[("field", "policy_cache_capacity".to_string())],
+            )));
         }
         if self.sql_parse_cache_capacity == 0 {
-            return Err(ConfigError::InvalidCacheCapacity(
-                "sql_parse_cache_capacity must be > 0".to_string(),
-            ));
+            return Err(ConfigError::InvalidCacheCapacity(crate::i18n::t(
+                "config-capacity-must-be-positive",
+                &[("field", "sql_parse_cache_capacity".to_string())],
+            )));
         }
         if self.query_cache_capacity == 0 {
-            return Err(ConfigError::InvalidCacheCapacity(
-                "query_cache_capacity must be > 0".to_string(),
-            ));
+            return Err(ConfigError::InvalidCacheCapacity(crate::i18n::t(
+                "config-capacity-must-be-positive",
+                &[("field", "query_cache_capacity".to_string())],
+            )));
         }
         Ok(())
     }
@@ -257,22 +260,31 @@ impl PoolConfig {
         if self.max_connections == 0 {
             return Err(ConfigError::InvalidValue {
                 key: "max_connections".to_string(),
-                message: "max_connections must be > 0".to_string(),
+                message: crate::i18n::t(
+                    "config-capacity-must-be-positive",
+                    &[("field", "max_connections".to_string())],
+                ),
             });
         }
         if self.min_connections > self.max_connections {
             return Err(ConfigError::InvalidValue {
                 key: "min_connections".to_string(),
-                message: format!(
-                    "min_connections ({}) must be <= max_connections ({})",
-                    self.min_connections, self.max_connections
+                message: crate::i18n::t(
+                    "config-min-max-connections",
+                    &[
+                        ("min", self.min_connections.to_string()),
+                        ("max", self.max_connections.to_string()),
+                    ],
                 ),
             });
         }
         if self.acquire_timeout == 0 {
             return Err(ConfigError::InvalidValue {
                 key: "acquire_timeout".to_string(),
-                message: "acquire_timeout must be > 0".to_string(),
+                message: crate::i18n::t(
+                    "config-capacity-must-be-positive",
+                    &[("field", "acquire_timeout".to_string())],
+                ),
             });
         }
         Ok(())
@@ -390,7 +402,10 @@ impl DatabaseType {
             "lbug" | "ladybug" => Ok(DatabaseType::Ladybug),
             "neo4j" | "neo4j+s" | "neo4j+ssc" => Ok(DatabaseType::Neo4j),
             other => Err(crate::error::DbNexusError::UnsupportedDatabaseScheme(
-                format!("'{other}' is not a supported database scheme"),
+                crate::i18n::t(
+                    "config-unsupported-scheme",
+                    &[("scheme", other.to_string())],
+                ),
             )),
         }
     }
@@ -692,7 +707,10 @@ fn parse_env_u32(key: &str, default: u32) -> Result<u32, ConfigError> {
     match std::env::var(key) {
         Ok(val) => val.parse::<u32>().map_err(|_| ConfigError::InvalidValue {
             key: key.to_string(),
-            message: format!("expected u32, got '{val}'"),
+            message: crate::i18n::t(
+                "config-env-expected-type",
+                &[("type", "u32".to_string()), ("value", val.clone())],
+            ),
         }),
         Err(_) => Ok(default),
     }
@@ -704,7 +722,10 @@ fn parse_env_u64(key: &str, default: u64) -> Result<u64, ConfigError> {
     match std::env::var(key) {
         Ok(val) => val.parse::<u64>().map_err(|_| ConfigError::InvalidValue {
             key: key.to_string(),
-            message: format!("expected u64, got '{val}'"),
+            message: crate::i18n::t(
+                "config-env-expected-type",
+                &[("type", "u64".to_string()), ("value", val.clone())],
+            ),
         }),
         Err(_) => Ok(default),
     }

@@ -76,9 +76,9 @@ impl TableEndpoint {
         }
         let columns: Vec<String> = columns.iter().map(|c| c.to_string()).collect();
         if columns.is_empty() || columns.iter().any(|c| !is_safe_identifier(c)) {
-            return Err(DbError::Config(
-                "data-api columns must be non-empty safe identifiers".to_string(),
-            ));
+            return Err(DbError::Config(crate::i18n::tr(
+                "data-api-columns-required",
+            )));
         }
         Ok(Self {
             table: table.to_string(),
@@ -337,9 +337,12 @@ impl DataApiGateway {
     }
 
     fn endpoint(&self, name: &str) -> DbResult<&TableEndpoint> {
-        self.endpoints
-            .get(name)
-            .ok_or_else(|| DbError::Config(format!("unknown data-api endpoint: '{name}'")))
+        self.endpoints.get(name).ok_or_else(|| {
+            DbError::Config(crate::i18n::t(
+                "data-api-unknown-endpoint",
+                &[("name", name.to_string())],
+            ))
+        })
     }
 
     /// 行投影后过滤：sqlite 行内省方言会把全部表列补回（未投影列为 Null），
@@ -433,7 +436,9 @@ impl DataApiGateway {
 
         // 分页参数校验与钳制
         if req.page == 0 {
-            return Err(DbError::Config("data-api page starts at 1".to_string()));
+            return Err(DbError::Config(crate::i18n::tr(
+                "data-api-page-starts-at-one",
+            )));
         }
         let page_size = if req.page_size == 0 {
             ep.default_page_size

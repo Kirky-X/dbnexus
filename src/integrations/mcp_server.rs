@@ -19,6 +19,7 @@ use rmcp::{ErrorData as McpError, RoleServer};
 use crate::database::data_api::{DataApiGateway, Filter, ListRequest, OwnerScope, TableEndpoint};
 use crate::database::identifier::is_safe_identifier;
 use crate::foundation::{DbError, DbResult};
+use crate::i18n;
 use crate::{DbPool, Session};
 
 /// MCP Server 装配配置
@@ -45,12 +46,13 @@ impl DbnexusMcpServer {
     /// 构造：角色为空 / 端点名或列名非法 → Err
     pub fn new(pool: Arc<DbPool>, config: McpServerConfig) -> DbResult<Self> {
         if config.role.trim().is_empty() {
-            return Err(DbError::Config("mcp execution role is required".into()));
+            return Err(DbError::Config(i18n::tr("mcp-role-required")));
         }
         for (name, endpoint) in &config.endpoints {
             if !is_safe_identifier(name) || !is_safe_identifier(&endpoint.table) {
-                return Err(DbError::Config(format!(
-                    "mcp endpoint name/table must be a safe identifier: '{name}'"
+                return Err(DbError::Config(i18n::t(
+                    "mcp-endpoint-unsafe-identifier",
+                    &[("name", name.clone())],
                 )));
             }
         }
@@ -83,35 +85,43 @@ impl DbnexusMcpServer {
         let table = args
             .get("table")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| "table is required".to_string())?;
+            .ok_or_else(|| i18n::tr("mcp-table-required"))?;
         let endpoint = self
             .endpoints
             .get(table)
-            .ok_or_else(|| "endpoint not registered".to_string())?;
+            .ok_or_else(|| i18n::tr("mcp-endpoint-not-registered"))?;
 
         let mut filters = Vec::new();
         if let Some(list) = args.get("filters").and_then(|v| v.as_array()) {
             for item in list {
                 let triple = item
                     .as_array()
-                    .ok_or_else(|| "invalid filter tuple".to_string())?;
+                    .ok_or_else(|| i18n::tr("mcp-invalid-filter-tuple"))?;
                 if triple.len() != 3 {
-                    return Err("invalid filter tuple".into());
+                    return Err(i18n::tr("mcp-invalid-filter-tuple"));
                 }
                 let column = triple[0]
                     .as_str()
-                    .ok_or_else(|| "invalid filter column".to_string())?;
+                    .ok_or_else(|| i18n::tr("mcp-invalid-filter-column"))?;
                 let op = triple[1]
                     .as_str()
-                    .ok_or_else(|| "invalid filter op".to_string())?;
+                    .ok_or_else(|| i18n::tr("mcp-invalid-filter-op"))?;
                 let value = triple[2].clone();
                 if !endpoint.columns.iter().any(|c| c == column) {
-                    return Err(format!("column not in endpoint whitelist: {column}"));
+                    return Err(i18n::t(
+                        "mcp-column-not-in-whitelist",
+                        &[("column", column.to_string())],
+                    ));
                 }
                 let filter = match op {
                     "eq" => Filter::eq(column, value),
                     "contains" => Filter::contains(column, value.as_str().unwrap_or_default()),
-                    other => return Err(format!("unsupported filter op: {other}")),
+                    other => {
+                        return Err(i18n::t(
+                            "mcp-unsupported-filter-op",
+                            &[("other", other.to_string())],
+                        ));
+                    }
                 };
                 filters.push(filter);
             }
@@ -132,7 +142,7 @@ impl DbnexusMcpServer {
             Some(scope) => self.gateway.list_owned(table, &req, scope).await,
             None => self.gateway.list(table, &req).await,
         }
-        .map_err(|e| format!("query denied: {}", e.message()))?;
+        .map_err(|e| i18n::t("mcp-query-denied", &[("error", e.message())]))?;
         serde_json::to_string(&response).map_err(|e| e.to_string())
     }
 
@@ -141,11 +151,11 @@ impl DbnexusMcpServer {
         let table = args
             .get("table")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| "table is required".to_string())?;
+            .ok_or_else(|| i18n::tr("mcp-table-required"))?;
         let endpoint = self
             .endpoints
             .get(table)
-            .ok_or_else(|| "endpoint not registered".to_string())?;
+            .ok_or_else(|| i18n::tr("mcp-endpoint-not-registered"))?;
         serde_json::to_string(&serde_json::json!({
             "table": endpoint.table,
             "columns": endpoint.columns,
@@ -161,7 +171,7 @@ impl DbnexusMcpServer {
         let sql = args
             .get("sql")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| "sql is required".to_string())?;
+            .ok_or_else(|| i18n::tr("mcp-sql-required"))?;
         let session = self.session().await.map_err(|e| e.message())?;
         let explanation = session.explain_access(sql).await.map_err(|e| e.message())?;
         serde_json::to_string(&explanation).map_err(|e| e.to_string())
@@ -173,7 +183,7 @@ impl DbnexusMcpServer {
             "dbnexus_query" => self.tool_query(args).await,
             "dbnexus_schema" => self.tool_schema(args),
             "dbnexus_explain" => self.tool_explain(args).await,
-            other => Err(format!("unknown tool: {other}")),
+            other => Err(i18n::t("mcp-unknown-tool", &[("other", other.to_string())])),
         }
     }
 }

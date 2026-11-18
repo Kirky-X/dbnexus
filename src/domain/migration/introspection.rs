@@ -91,10 +91,12 @@ use crate::domain::migration::ColumnType;
 
 async fn query_json(conn: &DatabaseConnection, sql: &str) -> DbResult<Vec<serde_json::Value>> {
     let stmt = Statement::from_string(conn.get_database_backend(), sql.to_string());
-    let rows = conn
-        .query_all_raw(stmt)
-        .await
-        .map_err(DbError::Connection)?;
+    let rows = conn.query_all_raw(stmt).await.map_err(|e| {
+        DbError::Connection(sea_orm::DbErr::Custom(format!(
+            "{}: {e}",
+            i18n::tr("introspect-query-failed")
+        )))
+    })?;
     Ok(rows.iter().map(json_from_row).collect())
 }
 

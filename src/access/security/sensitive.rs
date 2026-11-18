@@ -122,9 +122,9 @@ impl SensitiveMasker {
         let cleaned: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
 
         if cleaned.len() < 7 {
-            return Err(SensitiveError::InvalidInput(
-                "Phone number too short".to_string(),
-            ));
+            return Err(SensitiveError::InvalidInput(crate::i18n::tr(
+                "sensitive-phone-too-short",
+            )));
         }
 
         let chars: Vec<char> = cleaned.chars().collect();
@@ -146,18 +146,18 @@ impl SensitiveMasker {
         let parts: Vec<&str> = email.split('@').collect();
 
         if parts.len() != 2 {
-            return Err(SensitiveError::InvalidInput(
-                "Invalid email format".to_string(),
-            ));
+            return Err(SensitiveError::InvalidInput(crate::i18n::tr(
+                "sensitive-invalid-email-format",
+            )));
         }
 
         let local = parts[0];
         let domain = parts[1];
 
         if local.is_empty() {
-            return Err(SensitiveError::InvalidInput(
-                "Email local part is empty".to_string(),
-            ));
+            return Err(SensitiveError::InvalidInput(crate::i18n::tr(
+                "sensitive-email-local-empty",
+            )));
         }
 
         // 使用 chars() 安全处理 Unicode（避免非 ASCII 字节切片 panic）
@@ -180,9 +180,9 @@ impl SensitiveMasker {
 
         // 身份证号可以是15位或18位
         if cleaned.len() != 15 && cleaned.len() != 18 {
-            return Err(SensitiveError::InvalidInput(
-                "Invalid ID card length".to_string(),
-            ));
+            return Err(SensitiveError::InvalidInput(crate::i18n::tr(
+                "sensitive-invalid-id-card-length",
+            )));
         }
 
         let chars: Vec<char> = cleaned.chars().collect();
@@ -201,9 +201,9 @@ impl SensitiveMasker {
         let cleaned: String = card.chars().filter(|c| c.is_ascii_digit()).collect();
 
         if cleaned.len() < 8 {
-            return Err(SensitiveError::InvalidInput(
-                "Bank card number too short".to_string(),
-            ));
+            return Err(SensitiveError::InvalidInput(crate::i18n::tr(
+                "sensitive-bank-card-too-short",
+            )));
         }
 
         let chars: Vec<char> = cleaned.chars().collect();
@@ -222,7 +222,9 @@ impl SensitiveMasker {
         let trimmed = name.trim();
 
         if trimmed.is_empty() {
-            return Err(SensitiveError::InvalidInput("Name is empty".to_string()));
+            return Err(SensitiveError::InvalidInput(crate::i18n::tr(
+                "sensitive-name-empty",
+            )));
         }
 
         let chars: Vec<char> = trimmed.chars().collect();
@@ -240,7 +242,9 @@ impl SensitiveMasker {
         let trimmed = address.trim();
 
         if trimmed.is_empty() {
-            return Err(SensitiveError::InvalidInput("Address is empty".to_string()));
+            return Err(SensitiveError::InvalidInput(crate::i18n::tr(
+                "sensitive-address-empty",
+            )));
         }
 
         let keywords = ["省", "市", "区", "县", "镇"];
@@ -273,7 +277,9 @@ impl SensitiveMasker {
     /// 自定义脱敏
     fn mask_custom(data: &str, keep_prefix: usize, keep_suffix: usize) -> SensitiveResult<String> {
         if data.is_empty() {
-            return Err(SensitiveError::InvalidInput("Data is empty".to_string()));
+            return Err(SensitiveError::InvalidInput(crate::i18n::tr(
+                "sensitive-data-empty",
+            )));
         }
 
         let chars: Vec<char> = data.chars().collect();
@@ -281,7 +287,7 @@ impl SensitiveMasker {
 
         // 溢出保护：当保留长度 >= 数据长度时，无内容可脱敏，返回原始数据
         let total_keep = keep_prefix.checked_add(keep_suffix).ok_or_else(|| {
-            SensitiveError::InvalidInput("keep_prefix + keep_suffix overflow".to_string())
+            SensitiveError::InvalidInput(crate::i18n::tr("sensitive-keep-range-overflow"))
         })?;
         if total_keep >= len {
             return Ok(data.to_string());

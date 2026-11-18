@@ -61,7 +61,7 @@ impl PermissionConfig {
         if self.rate_limit_enabled && self.rate_limit_max_requests == 0 {
             return Err(PermissionConfigError::InvalidValue {
                 field: "rate_limit_max_requests".into(),
-                reason: "must be greater than 0 when rate limiting enabled".into(),
+                reason: crate::i18n::tr("perm-rate-limit-threshold-positive"),
             });
         }
         if let Some(path) = &self.policy_path {

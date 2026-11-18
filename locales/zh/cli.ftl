@@ -146,3 +146,19 @@ cli-help-user-add-username = 用户名（1-64 位字母/数字/_.-）
 cli-help-user-add-password = 密码（存储加盐 SHA-256 摘要，MVP；生产建议接 authentication bcrypt）
 cli-help-user-add-role = 角色（1-64 位字母/数字/_-，默认 admin）
 cli-help-user-remove-username = 用户名
+
+
+# --- 第一阶段：生成的迁移文件头标签 ---
+cli-migration-hdr-migration = 迁移
+cli-migration-hdr-version = 版本
+cli-migration-hdr-created = 创建时间
+cli-migration-hdr-type = 类型
+cli-migration-hdr-type-auto = 根据 schema 差异自动生成
+cli-migration-hdr-type-manual = 手动迁移
+cli-migration-hdr-up = UP
+cli-migration-hdr-down = DOWN
+cli-migration-hdr-apply = 应用迁移
+cli-migration-hdr-rollback = 回滚迁移
+cli-invalid-schema-file = 无效的 schema 文件 { $file }: { $error }
+cli-cannot-read-schema-file = 无法读取 schema 文件 { $spec }: { $error }
+cli-mcp-serve-error = MCP 服务错误: { $error }

@@ -262,9 +262,9 @@ impl PasswordPolicy {
         // 最小长度按字符计（复杂度口径）
         let char_count = password.chars().count();
         if char_count < self.min_len {
-            return Err(AuthError::PasswordHash(format!(
-                "Password must be at least {} characters",
-                self.min_len
+            return Err(AuthError::PasswordHash(i18n::t(
+                "auth-password-too-short",
+                &[("min_len", self.min_len.to_string())],
             )));
         }
 
@@ -281,38 +281,38 @@ impl PasswordPolicy {
 
         // 必须包含大写字母
         if !password.chars().any(|c| c.is_uppercase()) {
-            return Err(AuthError::PasswordHash(
-                "Password must contain at least one uppercase letter".to_string(),
-            ));
+            return Err(AuthError::PasswordHash(i18n::tr(
+                "auth-password-needs-uppercase",
+            )));
         }
 
         // 必须包含小写字母
         if !password.chars().any(|c| c.is_lowercase()) {
-            return Err(AuthError::PasswordHash(
-                "Password must contain at least one lowercase letter".to_string(),
-            ));
+            return Err(AuthError::PasswordHash(i18n::tr(
+                "auth-password-needs-lowercase",
+            )));
         }
 
         // 必须包含数字
         if !password.chars().any(|c| c.is_numeric()) {
-            return Err(AuthError::PasswordHash(
-                "Password must contain at least one digit".to_string(),
-            ));
+            return Err(AuthError::PasswordHash(i18n::tr(
+                "auth-password-needs-digit",
+            )));
         }
 
         // 必须包含特殊字符
         if !password.chars().any(|c| !c.is_alphanumeric()) {
-            return Err(AuthError::PasswordHash(
-                "Password must contain at least one special character".to_string(),
-            ));
+            return Err(AuthError::PasswordHash(i18n::tr(
+                "auth-password-needs-special",
+            )));
         }
 
         // 常见弱密码黑名单检查（大小写不敏感）
         let password_lower = password.to_lowercase();
         if self.blacklist.iter().any(|p| p == &password_lower) {
-            return Err(AuthError::PasswordHash(
-                "Password is too common and easily guessable".to_string(),
-            ));
+            return Err(AuthError::PasswordHash(i18n::tr(
+                "auth-password-too-common",
+            )));
         }
 
         Ok(())

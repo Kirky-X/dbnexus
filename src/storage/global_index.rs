@@ -201,14 +201,20 @@ impl GlobalIndex {
         let session = match self.pool.get_session("admin").await {
             Ok(s) => s,
             Err(e) => {
-                all_errors.push(format!("Failed to acquire session: {:?}", e));
+                all_errors.push(crate::i18n::t(
+                    "global-index-acquire-session-failed",
+                    &[("error", format!("{e:?}"))],
+                ));
                 return (0, all_errors);
             }
         };
         let conn = match session.connection() {
             Ok(c) => c,
             Err(e) => {
-                all_errors.push(format!("Failed to get connection: {:?}", e));
+                all_errors.push(crate::i18n::t(
+                    "global-index-get-connection-failed",
+                    &[("error", format!("{e:?}"))],
+                ));
                 return (0, all_errors);
             }
         };

@@ -878,7 +878,7 @@ impl DuckDbConnection {
         let rows = self.query("SELECT 1 AS health").await?;
         if rows.is_empty() {
             return Err(DbError::Connection(sea_orm::DbErr::Custom(
-                "DuckDB health check returned no rows".to_string(),
+                crate::i18n::tr("duckdb-health-check-no-rows"),
             )));
         }
         Ok(())
@@ -929,7 +929,9 @@ impl DuckDbConnection {
     /// 返回的 `SemaphorePermit` 在 drop 时自动释放，确保不会泄漏。
     async fn acquire_permit(&self) -> DbResult<tokio::sync::SemaphorePermit<'_>> {
         self.spawn_permit.acquire().await.map_err(|_| {
-            DbError::Connection(sea_orm::DbErr::Custom("Semaphore closed".to_string()))
+            DbError::Connection(sea_orm::DbErr::Custom(crate::i18n::tr(
+                "duckdb-semaphore-closed",
+            )))
         })
     }
 }

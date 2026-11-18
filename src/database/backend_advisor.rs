@@ -77,7 +77,7 @@ pub async fn extract_features(sql: &str) -> DbResult<QueryFeatures> {
     parser
         .parse_single(sql)
         .await
-        .map_err(|_| DbError::Query("unparsable SQL: no backend advice".into()))?;
+        .map_err(|_| DbError::Query(crate::i18n::tr("advice-unparsable-sql")))?;
 
     let upper = sql.to_ascii_uppercase();
     let stripped = strip_literals(&upper);

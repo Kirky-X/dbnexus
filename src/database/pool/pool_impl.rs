@@ -192,7 +192,7 @@ impl DbPoolBuilder {
             }
         } else {
             return Err(crate::foundation::DbError::new(sea_orm::DbErr::Custom(
-                "Either url or config must be provided".to_string(),
+                crate::i18n::tr("pool-url-or-config-required"),
             )));
         };
 

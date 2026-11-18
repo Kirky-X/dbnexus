@@ -96,15 +96,21 @@ impl AsyncAutoBuilder for DbNexusModule {
         Box::pin(async move {
             // 构建顺序：require OxcacheModule 能力（`Arc<dyn CacheBackend + Send + Sync>`）→
             // 经 cache_provider 注入 OxcacheDbCacheAdapter → 读 DbConfig → 建池 → 返回
-            let cache_cap = kit
-                .require::<OxcacheModule>()
-                .map_err(|e| DbError::Config(format!("require OxcacheModule: {e}")))?;
+            let cache_cap = kit.require::<OxcacheModule>().map_err(|e| {
+                DbError::Config(crate::i18n::t(
+                    "kit-require-oxcache-module",
+                    &[("error", e.to_string())],
+                ))
+            })?;
 
             let adapter = OxcacheDbCacheAdapter::new(cache_cap);
 
-            let config: DbConfig = kit
-                .config()
-                .map_err(|e| DbError::Config(format!("read DbConfig: {e}")))?;
+            let config: DbConfig = kit.config().map_err(|e| {
+                DbError::Config(crate::i18n::t(
+                    "kit-read-dbconfig",
+                    &[("error", e.to_string())],
+                ))
+            })?;
 
             let pool = DbPoolBuilder::new()
                 .config(config)
@@ -147,9 +153,12 @@ impl AsyncAutoBuilder for DbNexusCacheModule {
         kit: &'a AsyncKit,
     ) -> Pin<Box<dyn Future<Output = Result<Self::Capability, Self::Error>> + Send + 'a>> {
         Box::pin(async move {
-            let cache_cap = kit
-                .require::<OxcacheModule>()
-                .map_err(|e| DbError::Config(format!("require OxcacheModule: {e}")))?;
+            let cache_cap = kit.require::<OxcacheModule>().map_err(|e| {
+                DbError::Config(crate::i18n::t(
+                    "kit-require-oxcache-module",
+                    &[("error", e.to_string())],
+                ))
+            })?;
             let adapter = OxcacheDbCacheAdapter::new(cache_cap);
             Ok(Arc::new(adapter) as Arc<dyn crate::domain::DbCacheProvider + Send + Sync>)
         })
@@ -186,14 +195,19 @@ impl AsyncAutoBuilder for DbNexusAuditModule {
         kit: &'a AsyncKit,
     ) -> Pin<Box<dyn Future<Output = Result<Self::Capability, Self::Error>> + Send + 'a>> {
         Box::pin(async move {
-            let pool = kit
-                .require::<DbNexusModule>()
-                .map_err(|e| DbError::Config(format!("require DbNexusModule: {e}")))?;
+            let pool = kit.require::<DbNexusModule>().map_err(|e| {
+                DbError::Config(crate::i18n::t(
+                    "kit-require-dbnexus-module",
+                    &[("error", e.to_string())],
+                ))
+            })?;
             let storage = crate::domain::DbAuditStorage::new(pool);
-            storage
-                .init()
-                .await
-                .map_err(|e| DbError::Config(format!("audit storage init: {e}")))?;
+            storage.init().await.map_err(|e| {
+                DbError::Config(crate::i18n::t(
+                    "kit-audit-storage-init",
+                    &[("error", e.to_string())],
+                ))
+            })?;
             Ok(Arc::new(storage) as Arc<dyn crate::domain::AuditStorage>)
         })
     }
@@ -250,9 +264,12 @@ impl AsyncAutoBuilder for DbNexusHealthModule {
         kit: &'a AsyncKit,
     ) -> Pin<Box<dyn Future<Output = Result<Self::Capability, Self::Error>> + Send + 'a>> {
         Box::pin(async move {
-            let pool = kit
-                .require::<DbNexusModule>()
-                .map_err(|e| DbError::Config(format!("require DbNexusModule: {e}")))?;
+            let pool = kit.require::<DbNexusModule>().map_err(|e| {
+                DbError::Config(crate::i18n::t(
+                    "kit-require-dbnexus-module",
+                    &[("error", e.to_string())],
+                ))
+            })?;
             Ok(DbHealthCapability { pool })
         })
     }

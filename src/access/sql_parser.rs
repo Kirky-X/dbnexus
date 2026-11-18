@@ -327,15 +327,15 @@ impl SqlParser {
         }
 
         if contains_sql_injection(sql) {
-            return Err(SqlParseError::ParseError(
-                "SQL statement contains potential injection patterns".to_string(),
-            ));
+            return Err(SqlParseError::ParseError(crate::i18n::tr(
+                "sql-injection-patterns",
+            )));
         }
 
         if contains_ddl_operation(sql) {
-            return Err(SqlParseError::UnsupportedStatement(
-                "DDL operations are not allowed".to_string(),
-            ));
+            return Err(SqlParseError::UnsupportedStatement(crate::i18n::tr(
+                "sql-ddl-not-allowed",
+            )));
         }
 
         if contains_variables(sql) {
@@ -355,7 +355,7 @@ impl SqlParser {
         let statement = statements
             .into_iter()
             .next()
-            .ok_or_else(|| SqlParseError::ParseError("No statement found".to_string()))?;
+            .ok_or_else(|| SqlParseError::ParseError(crate::i18n::tr("sql-no-statement-found")))?;
         self.classify_statement(statement, sql.to_string())
     }
 

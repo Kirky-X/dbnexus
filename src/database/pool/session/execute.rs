@@ -239,12 +239,12 @@ impl Session {
             return Ok(sql.to_string());
         }
         let parser = SqlParser::shared().await;
-        let parsed = parser
-            .parse_single(sql)
-            .await
-            .map_err(|_| DbError::PermissionDenied {
+        let parsed = parser.parse_single(sql).await.map_err(|_| {
+            log::warn!("{}", i18n::tr("session-rls-parse-failed"));
+            DbError::PermissionDenied {
                 reason: crate::foundation::DenialReason::RlsParseFailed,
-            })?;
+            }
+        })?;
         use crate::access::sql_parser::SqlOperationType;
         let in_scope = matches!(
             parsed.operation_type,
@@ -264,7 +264,11 @@ impl Session {
     ) -> DbResult<String> {
         use crate::access::data_protection::RlsDecision;
         match decision {
-            RlsDecision::Passthrough | RlsDecision::OutOfScope => Ok(original_sql.to_string()),
+            RlsDecision::Passthrough => Ok(original_sql.to_string()),
+            RlsDecision::OutOfScope => {
+                log::debug!("{}", i18n::tr("session-rls-not-applicable"));
+                Ok(original_sql.to_string())
+            }
             RlsDecision::Inject { sql } => Ok(sql),
             RlsDecision::InjectDegraded {
                 sql,

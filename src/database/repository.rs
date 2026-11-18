@@ -108,7 +108,10 @@ pub(crate) fn sql_literal(value: &Value, backend: SqlBackend) -> DbResult<String
         Value::String(s) => Ok(format!("'{}'", escape_sql_literal_content(s, backend))),
         Value::Array(_) | Value::Object(_) => {
             let json = serde_json::to_string(value).map_err(|e| {
-                DbError::Config(format!("entity nested value serialize failed: {e}"))
+                DbError::Config(crate::i18n::t(
+                    "repository-nested-value-serialize-failed",
+                    &[("error", e.to_string())],
+                ))
             })?;
             Ok(format!("'{}'", escape_sql_literal_content(&json, backend)))
         }
@@ -379,13 +382,16 @@ impl JsonRepository {
     }
 
     fn entity_object<T: Serialize>(&self, entity: &T) -> DbResult<serde_json::Map<String, Value>> {
-        match serde_json::to_value(entity)
-            .map_err(|e| DbError::Config(format!("entity serialize failed: {e}")))?
-        {
+        match serde_json::to_value(entity).map_err(|e| {
+            DbError::Config(crate::i18n::t(
+                "repository-entity-serialize-failed",
+                &[("error", e.to_string())],
+            ))
+        })? {
             Value::Object(map) => Ok(map),
-            _ => Err(DbError::Config(
-                "repository entity must serialize to a JSON object".to_string(),
-            )),
+            _ => Err(DbError::Config(crate::i18n::tr(
+                "repository-entity-not-object",
+            ))),
         }
     }
 }
@@ -402,9 +408,9 @@ where
     async fn insert(&self, pool: &DbPool, entity: &T) -> DbResult<i64> {
         let map = self.entity_object(entity)?;
         if map.is_empty() {
-            return Err(DbError::Config(
-                "repository insert requires at least one column".to_string(),
-            ));
+            return Err(DbError::Config(crate::i18n::tr(
+                "repository-insert-requires-column",
+            )));
         }
         let backend = sea_backend(pool);
         let mut columns = Vec::with_capacity(map.len());
@@ -490,9 +496,9 @@ where
     async fn update(&self, pool: &DbPool, id: i64, entity: &T) -> DbResult<u64> {
         let map = self.entity_object(entity)?;
         if map.is_empty() {
-            return Err(DbError::Config(
-                "repository update requires at least one column".to_string(),
-            ));
+            return Err(DbError::Config(crate::i18n::tr(
+                "repository-update-requires-column",
+            )));
         }
         let backend = sea_backend(pool);
         let mut assignments = Vec::with_capacity(map.len());
@@ -513,9 +519,9 @@ where
             params.push(value.clone());
         }
         if assignments.is_empty() {
-            return Err(DbError::Config(
-                "repository update requires at least one non-id column".to_string(),
-            ));
+            return Err(DbError::Config(crate::i18n::tr(
+                "repository-update-requires-non-id-column",
+            )));
         }
         n += 1;
         let sql = format!(

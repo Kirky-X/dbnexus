@@ -157,7 +157,7 @@ impl JwtManager {
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|_| AuthError::TokenGeneration("System time error".to_string()))?
+            .map_err(|_| AuthError::TokenGeneration(crate::i18n::tr("auth-system-time-error")))?
             .as_secs() as usize;
 
         let expiration = match token_type {

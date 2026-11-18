@@ -75,7 +75,7 @@ impl ReplicationLagDetector for PostgresLagDetector {
             .await
             .map_err(DbError::Connection)?
             // 正常情况下该查询恒返回单行；无行说明后端异常，交由调用方回退主库
-            .ok_or_else(|| DbError::Query("pg_wal_lsn_diff query returned no rows".to_string()))?;
+            .ok_or_else(|| DbError::Query(crate::i18n::tr("replica-wal-lsn-no-rows")))?;
         let raw: String = row.try_get_by("lag_bytes").map_err(DbError::Connection)?;
         let lag_bytes = parse_pg_wal_lag(&raw);
         // 解析失败（lag_bytes = None）视为"无法确认已同步"，保守判定未追上

@@ -126,7 +126,7 @@ impl SagaOrchestrator {
                     compensated_steps: Vec::new(),
                     failure: Some(SagaFailure {
                         step_name: saga_id.to_string(),
-                        error: "recovered saga log not found".to_string(),
+                        error: crate::i18n::tr("saga-recovered-log-not-found"),
                     }),
                 };
             }
@@ -175,7 +175,10 @@ impl SagaOrchestrator {
                             mark_compensation_failed(
                                 &mut log,
                                 &step_log.name,
-                                &format!("compensation replay failed: {comp_err}"),
+                                &crate::i18n::t(
+                                    "saga-compensation-replay-failed",
+                                    &[("error", comp_err.to_string())],
+                                ),
                             );
                         }
                     }
@@ -333,7 +336,10 @@ impl SagaOrchestrator {
                                                 mark_compensation_failed(
                                                     &mut log,
                                                     completed_name,
-                                                    &format!("compensation failed: {comp_err}"),
+                                                    &crate::i18n::t(
+                                                        "saga-compensation-step-failed",
+                                                        &[("error", comp_err.to_string())],
+                                                    ),
                                                 );
                                             }
                                         }
@@ -414,7 +420,10 @@ impl SagaOrchestrator {
                         compensated_steps: Vec::new(),
                         failure: Some(SagaFailure {
                             step_name: step.name.clone(),
-                            error: format!("No session available for shard {}", step.shard_id),
+                            error: crate::i18n::t(
+                                "saga-no-session-for-shard",
+                                &[("shard_id", step.shard_id.to_string())],
+                            ),
                         }),
                     };
                 }

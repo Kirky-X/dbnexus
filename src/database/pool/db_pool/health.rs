@@ -114,9 +114,10 @@ impl DbPool {
                 }
                 #[cfg(not(feature = "duckdb"))]
                 {
-                    Err(DbError::Connection(sea_orm::DbErr::Custom(
-                        "DuckDB feature is not enabled".to_string(),
-                    )))
+                    Err(DbError::Connection(sea_orm::DbErr::Custom(crate::i18n::t(
+                        "pool-feature-not-enabled",
+                        &[("feature", "DuckDB".to_string())],
+                    ))))
                 }
             }
             crate::foundation::DatabaseType::Ladybug => {
@@ -128,9 +129,10 @@ impl DbPool {
                 }
                 #[cfg(not(feature = "ladybug"))]
                 {
-                    Err(DbError::Connection(sea_orm::DbErr::Custom(
-                        "Ladybug feature is not enabled".to_string(),
-                    )))
+                    Err(DbError::Connection(sea_orm::DbErr::Custom(crate::i18n::t(
+                        "pool-feature-not-enabled",
+                        &[("feature", "Ladybug".to_string())],
+                    ))))
                 }
             }
             crate::foundation::DatabaseType::Neo4j => {
@@ -144,9 +146,10 @@ impl DbPool {
                 }
                 #[cfg(not(feature = "neo4j"))]
                 {
-                    Err(DbError::Connection(sea_orm::DbErr::Custom(
-                        "Neo4j feature is not enabled".to_string(),
-                    )))
+                    Err(DbError::Connection(sea_orm::DbErr::Custom(crate::i18n::t(
+                        "pool-feature-not-enabled",
+                        &[("feature", "Neo4j".to_string())],
+                    ))))
                 }
             }
             _ => {

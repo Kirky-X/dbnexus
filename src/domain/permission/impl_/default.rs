@@ -64,7 +64,10 @@ impl YamlPermissionProvider {
             PermissionConfig::validate_policy_path(path)?;
 
             let content = tokio::fs::read_to_string(path).await.map_err(|e| {
-                PermissionError::ParseError(format!("Failed to read {}: {}", path, e))
+                PermissionError::ParseError(crate::i18n::t(
+                    "perm-provider-read-failed",
+                    &[("path", path.to_string()), ("error", e.to_string())],
+                ))
             })?;
 
             let policies: HashMap<String, RolePolicy> = serde_saphyr::from_str(&content)

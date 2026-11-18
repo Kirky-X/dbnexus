@@ -402,3 +402,113 @@ advice-reason-embedded-point-lookup = 单表点查更适合嵌入式数据库
 advice-reason-default-relational = 通用关系型查询；server 数据库是稳妥默认
 advice-reason-mysql-peer = 与 PostgreSQL 同属事务型；按运维生态选择
 advice-verify-scale = 仅为启发式；请结合实际数据规模与索引验证
+
+
+# --- 第一阶段：MCP Server 适配器错误文案 ---
+mcp-role-required = 缺少 MCP 执行角色
+mcp-endpoint-unsafe-identifier = MCP 端点名称/表名必须是安全标识符: '{ $name }'
+mcp-table-required = 缺少表名
+mcp-endpoint-not-registered = 端点未注册
+mcp-invalid-filter-tuple = 无效的过滤三元组
+mcp-invalid-filter-column = 无效的过滤列名
+mcp-invalid-filter-op = 无效的过滤操作符
+mcp-column-not-in-whitelist = 列不在端点白名单中: { $column }
+mcp-unsupported-filter-op = 不支持的过滤操作符: { $other }
+mcp-query-denied = 查询被拒绝: { $error }
+mcp-sql-required = 缺少 SQL 语句
+mcp-unknown-tool = 未知工具: { $other }
+
+# --- 第一阶段：Ladybug 图连接错误文案 ---
+ladybug-path-traversal-rejected = ladybug 数据库路径包含路径遍历字符 '..'，出于安全原因拒绝
+ladybug-database-new-failed = ladybug Database::new 失败: { $error }
+ladybug-semaphore-closed = 信号量已关闭
+ladybug-connection-new-failed = ladybug Connection::new: { $error }
+ladybug-txn-connection-new-failed = ladybug 事务 Connection::new: { $error }
+ladybug-begin-transaction-failed = ladybug BEGIN TRANSACTION: { $error }
+ladybug-commit-failed = ladybug COMMIT: { $error }
+ladybug-rollback-failed = ladybug ROLLBACK: { $error }
+ladybug-spawn-blocking-join-failed = spawn_blocking join: { $error }
+ladybug-health-check-no-rows = ladybug 健康检查未返回任何行
+ladybug-txn-thread-closed = 事务线程已关闭
+ladybug-txn-reply-dropped = 事务回复已丢失
+ladybug-query-failed = ladybug query: { $error }
+ladybug-prepare-failed = ladybug prepare: { $error }
+ladybug-execute-prepared-failed = ladybug execute (prepared): { $error }
+
+# --- 第一阶段：连接池类型不匹配（参数化规范镜像） ---
+pool-requires-connection = 操作需要 { $expected } 连接，但得到 { $actual }
+
+# --- 第一阶段：密码策略校验 ---
+auth-password-too-short = 密码至少需要 { $min_len } 个字符
+auth-password-needs-uppercase = 密码必须至少包含一个大写字母
+auth-password-needs-lowercase = 密码必须至少包含一个小写字母
+auth-password-needs-digit = 密码必须至少包含一个数字
+auth-password-needs-special = 密码必须至少包含一个特殊字符
+auth-password-too-common = 密码过于常见且容易被猜出
+
+# --- 第一阶段：配置校验原因载荷 ---
+config-capacity-must-be-positive = { $field } 必须大于 0
+config-min-max-connections = min_connections ({ $min }) 必须小于等于 max_connections ({ $max })
+config-unsupported-scheme = '{ $scheme }' 不是支持的数据库协议
+config-env-expected-type = 期望 { $type }，实际为 '{ $value }'
+
+
+# --- 第二阶段：注入已本地化错误模板的用户可见原因载荷 ---
+auth-system-time-error = 系统时间错误
+perm-no-roles-defined = 权限配置中未定义任何角色
+perm-rate-limit-threshold-positive = 启用速率限制时必须大于 0
+sql-empty-after-parsing = 解析后 SQL 语句为空
+sql-injection-patterns = SQL 语句包含潜在注入模式
+sql-ddl-not-allowed = 不允许执行 DDL 操作
+sql-no-statement-found = 未找到 SQL 语句
+sensitive-phone-too-short = 电话号码过短
+sensitive-invalid-email-format = 邮箱格式无效
+sensitive-email-local-empty = 邮箱本地部分为空
+sensitive-invalid-id-card-length = 身份证号长度无效
+sensitive-bank-card-too-short = 银行卡号过短
+sensitive-name-empty = 姓名为空
+sensitive-address-empty = 地址为空
+sensitive-data-empty = 数据为空
+sensitive-keep-range-overflow = keep_prefix + keep_suffix 溢出
+snowflake-machine-id-invalid = machine_id 必须在 0-1023 之间，实际为 { $machine_id }
+advice-unparsable-sql = 无法解析 SQL：无后端建议
+copy-requires-column-mvp = COPY 至少需要一个列（MVP 契约）
+copy-in-requires-row = copy_in 至少需要一个行
+data-api-columns-required = data-api 列名必须是非空的合法标识符
+data-api-unknown-endpoint = 未知的 data-api 端点: '{ $name }'
+data-api-page-starts-at-one = data-api 页码从 1 开始
+entity-event-subscriber-dropped = 实体事件订阅者已断开
+pool-feature-not-enabled = { $feature } 特性未启用
+duckdb-health-check-no-rows = DuckDB 健康检查未返回任何行
+duckdb-semaphore-closed = 信号量已关闭
+pool-url-or-config-required = 必须提供 url 或 config
+query-guard-sqlite-plan-missing-detail = sqlite 执行计划缺少详情
+replica-wal-lsn-no-rows = pg_wal_lsn_diff 查询未返回任何行
+repository-nested-value-serialize-failed = 实体嵌套值序列化失败: { $error }
+repository-entity-serialize-failed = 实体序列化失败: { $error }
+repository-entity-not-object = 实体必须序列化为 JSON 对象
+repository-insert-requires-column = repository insert 至少需要一个列
+repository-update-requires-column = repository update 至少需要一个列
+repository-update-requires-non-id-column = repository update 至少需要一个非 id 列
+saga-recovered-log-not-found = 未找到恢复的 saga 日志
+saga-compensation-replay-failed = 补偿重放失败: { $error }
+saga-compensation-step-failed = 补偿失败: { $error }
+saga-no-session-for-shard = 分片无可用会话: { $shard_id }
+migration-default-description = Schema 变更
+migration-duckdb-rollback-unsupported = DuckDB 连接不支持基于 SeaORM 的迁移回滚
+migration-graph-not-relational = 图数据库不参与关系型迁移
+migration-no-recognizable-sql = 迁移文件不包含可识别的 SQL 语句
+sql-reverser-parse-failed = 解析 SQL 失败: { $error }
+sql-reverser-unsupported-alter = 不支持的 ALTER 操作: { $op }
+perm-provider-read-failed = 读取失败 { $path }: { $error }
+retention-unsafe-table = 不安全的保留表: { $table }
+retention-role-required = 缺少 retention 角色
+kit-require-oxcache-module = 需要 OxcacheModule: { $error }
+kit-read-dbconfig = 读取 DbConfig: { $error }
+kit-require-dbnexus-module = 需要 DbNexusModule: { $error }
+kit-audit-storage-init = 审计存储初始化: { $error }
+cache-get-failed = 缓存读取失败: { $error }
+cache-set-failed = 缓存写入失败: { $error }
+cache-delete-failed = 缓存删除失败: { $error }
+global-index-acquire-session-failed = 获取会话失败: { $error }
+global-index-get-connection-failed = 获取连接失败: { $error }

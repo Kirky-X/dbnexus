@@ -53,7 +53,7 @@ pub mod locale;
 
 // Re-export commonly used functions at module level
 #[allow(unused_imports)]
-pub use catalog::{t, t_simple, translate};
+pub use catalog::{t, t_simple, tr, tr_args, translate};
 #[allow(unused_imports)]
 pub use locale::{current_locale, set_locale, set_locale_from_system};
 

@@ -406,3 +406,115 @@ advice-reason-embedded-point-lookup = Single-table point lookup favors an embedd
 advice-reason-default-relational = General relational query; a server database is a safe default
 advice-reason-mysql-peer = Peer to PostgreSQL for transactional workloads; choose by operational ecosystem
 advice-verify-scale = Heuristic only; verify against your data scale and indexes
+
+
+# --- Stage 1: MCP server adapter errors (canonical English mirrors of the
+# string literals previously embedded at the construction sites) ---
+mcp-role-required = mcp execution role is required
+mcp-endpoint-unsafe-identifier = mcp endpoint name/table must be a safe identifier: '{ $name }'
+mcp-table-required = table is required
+mcp-endpoint-not-registered = endpoint not registered
+mcp-invalid-filter-tuple = invalid filter tuple
+mcp-invalid-filter-column = invalid filter column
+mcp-invalid-filter-op = invalid filter op
+mcp-column-not-in-whitelist = column not in endpoint whitelist: { $column }
+mcp-unsupported-filter-op = unsupported filter op: { $other }
+mcp-query-denied = query denied: { $error }
+mcp-sql-required = sql is required
+mcp-unknown-tool = unknown tool: { $other }
+
+# --- Stage 1: Ladybug graph connection errors ---
+ladybug-path-traversal-rejected = ladybug database path contains path traversal characters '..': rejected for security
+ladybug-database-new-failed = ladybug Database::new failed: { $error }
+ladybug-semaphore-closed = Semaphore closed
+ladybug-connection-new-failed = ladybug Connection::new: { $error }
+ladybug-txn-connection-new-failed = ladybug txn Connection::new: { $error }
+ladybug-begin-transaction-failed = ladybug BEGIN TRANSACTION: { $error }
+ladybug-commit-failed = ladybug COMMIT: { $error }
+ladybug-rollback-failed = ladybug ROLLBACK: { $error }
+ladybug-spawn-blocking-join-failed = spawn_blocking join: { $error }
+ladybug-health-check-no-rows = ladybug health check returned no rows
+ladybug-txn-thread-closed = txn thread already closed
+ladybug-txn-reply-dropped = txn reply dropped
+ladybug-query-failed = ladybug query: { $error }
+ladybug-prepare-failed = ladybug prepare: { $error }
+ladybug-execute-prepared-failed = ladybug execute (prepared): { $error }
+
+# --- Stage 1: pool connection-type mismatch (parameterized canonical mirror) ---
+pool-requires-connection = Operation requires { $expected } connection but got { $actual }
+
+# --- Stage 1: password policy validation ---
+auth-password-too-short = Password must be at least { $min_len } characters
+auth-password-needs-uppercase = Password must contain at least one uppercase letter
+auth-password-needs-lowercase = Password must contain at least one lowercase letter
+auth-password-needs-digit = Password must contain at least one digit
+auth-password-needs-special = Password must contain at least one special character
+auth-password-too-common = Password is too common and easily guessable
+
+# --- Stage 1: config validation reason payloads ---
+config-capacity-must-be-positive = { $field } must be > 0
+config-min-max-connections = min_connections ({ $min }) must be <= max_connections ({ $max })
+config-unsupported-scheme = '{ $scheme }' is not a supported database scheme
+config-env-expected-type = expected { $type }, got '{ $value }'
+
+
+# --- Stage 2: user-visible reason payloads injected into already-localized
+# error templates (thiserror Display remains the canonical English contract) ---
+auth-system-time-error = System time error
+perm-no-roles-defined = No roles defined in permission config
+perm-rate-limit-threshold-positive = must be greater than 0 when rate limiting enabled
+sql-empty-after-parsing = Empty SQL statement after parsing
+sql-injection-patterns = SQL statement contains potential injection patterns
+sql-ddl-not-allowed = DDL operations are not allowed
+sql-no-statement-found = No statement found
+sensitive-phone-too-short = Phone number too short
+sensitive-invalid-email-format = Invalid email format
+sensitive-email-local-empty = Email local part is empty
+sensitive-invalid-id-card-length = Invalid ID card length
+sensitive-bank-card-too-short = Bank card number too short
+sensitive-name-empty = Name is empty
+sensitive-address-empty = Address is empty
+sensitive-data-empty = Data is empty
+sensitive-keep-range-overflow = keep_prefix + keep_suffix overflow
+snowflake-machine-id-invalid = machine_id must be 0-1023, got { $machine_id }
+advice-unparsable-sql = unparsable SQL: no backend advice
+copy-requires-column-mvp = COPY requires at least one column (MVP contract)
+copy-in-requires-row = copy_in requires at least one row
+data-api-columns-required = data-api columns must be non-empty safe identifiers
+data-api-unknown-endpoint = unknown data-api endpoint: '{ $name }'
+data-api-page-starts-at-one = data-api page starts at 1
+entity-event-subscriber-dropped = entity event subscriber dropped
+pool-feature-not-enabled = { $feature } feature is not enabled
+duckdb-health-check-no-rows = DuckDB health check returned no rows
+duckdb-semaphore-closed = Semaphore closed
+pool-url-or-config-required = Either url or config must be provided
+query-guard-sqlite-plan-missing-detail = sqlite plan missing detail
+replica-wal-lsn-no-rows = pg_wal_lsn_diff query returned no rows
+repository-nested-value-serialize-failed = entity nested value serialize failed: { $error }
+repository-entity-serialize-failed = entity serialize failed: { $error }
+repository-entity-not-object = repository entity must serialize to a JSON object
+repository-insert-requires-column = repository insert requires at least one column
+repository-update-requires-column = repository update requires at least one column
+repository-update-requires-non-id-column = repository update requires at least one non-id column
+saga-recovered-log-not-found = recovered saga log not found
+saga-compensation-replay-failed = compensation replay failed: { $error }
+saga-compensation-step-failed = compensation failed: { $error }
+saga-no-session-for-shard = No session available for shard { $shard_id }
+migration-default-description = Schema changes
+migration-duckdb-rollback-unsupported = DuckDB connections do not support SeaORM-based migration rollback
+migration-graph-not-relational = Graph databases do not participate in relational migrations
+migration-no-recognizable-sql = Migration file does not contain recognizable SQL statements
+sql-reverser-parse-failed = Failed to parse SQL: { $error }
+sql-reverser-unsupported-alter = Unsupported ALTER operation: { $op }
+perm-provider-read-failed = Failed to read { $path }: { $error }
+retention-unsafe-table = unsafe retention table: { $table }
+retention-role-required = retention role is required
+kit-require-oxcache-module = require OxcacheModule: { $error }
+kit-read-dbconfig = read DbConfig: { $error }
+kit-require-dbnexus-module = require DbNexusModule: { $error }
+kit-audit-storage-init = audit storage init: { $error }
+cache-get-failed = cache get failed: { $error }
+cache-set-failed = cache set failed: { $error }
+cache-delete-failed = cache delete failed: { $error }
+global-index-acquire-session-failed = Failed to acquire session: { $error }
+global-index-get-connection-failed = Failed to get connection: { $error }

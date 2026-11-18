@@ -50,8 +50,9 @@ impl SqlReverser {
     /// let down_sql = reverser.reverse(up_sql).unwrap();
     /// ```
     pub fn reverse(&self, up_sql: &str) -> Result<String, String> {
-        let statements = Parser::parse_sql(&self.dialect, up_sql)
-            .map_err(|e| format!("Failed to parse SQL: {}", e))?;
+        let statements = Parser::parse_sql(&self.dialect, up_sql).map_err(|e| {
+            crate::i18n::t("sql-reverser-parse-failed", &[("error", e.to_string())])
+        })?;
 
         let mut down_statements = Vec::new();
 
@@ -109,7 +110,10 @@ impl SqlReverser {
                     ));
                 }
                 _ => {
-                    return Err(format!("Unsupported ALTER operation: {:?}", op));
+                    return Err(crate::i18n::t(
+                        "sql-reverser-unsupported-alter",
+                        &[("op", format!("{op:?}"))],
+                    ));
                 }
             }
         }
