@@ -1230,6 +1230,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 > 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](CHANGELOG.md)（http-health 为 0.6.0-rc.6 新增）。
 
+## 数据保留策略（`retention` 特性）
+
+在实体上声明表级保留窗口，用确定性执行件清理到期行：
+
+```rust
+#[db_entity(table_name = "audit_logs", primary_key = "id", timestamps = true,
+            retention = "90d", retention_time_column = "created_at", archival = "cold_storage")]
+struct AuditLog { /* ... */ }
+```
+
+- 单位：`d`（天）、`w`（周）、`mo`（30 天固定近似；精确窗口优先用 `d`/`w`）。
+- `retention` 要求 `timestamps = true` 或显式 `retention_time_column`；时间列与 `archival` 标签必须依附 `retention` 声明。宏生成 `dbnexus_retention_meta() -> Option<(&str, &str, Option<&str>)>`。
+- 执行：`RetentionExecutor::new(pool, table, role, policy, time_column)` 后调 `purge_expired(limit)`，按 `now - duration` 截止时间分批删除（单批失败即停并报告已删数）；`purge_expired_with_archive(limit, archiver)` 先把到期行交回调，回调成功才删除——归档失败不丢数据。
+- 执行角色显式传入（不隐式用 admin）；表名/列名经安全标识符校验。调度外置（cron / K8s CronJob / tokio interval），框架不内置定时器。
+- 边界：这是时间窗删除，与审计模块的 `retention_count`（条数窗）不同；`archival = "cold_storage"` 仅是声明标签，真实归档目标由回调注入。
+
 ## 查询计划回归防护（`query-guard` 特性）
 
 `dbnexus-cli query-guard` 将 `EXPLAIN` 计划信号与基线比对，在部署前拦截计划退化：

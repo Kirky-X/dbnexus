@@ -783,3 +783,41 @@ async fn test_postgres_introspect_schema_roundtrip() {
             .any(|c| c.name == "name" && !c.is_nullable)
     );
 }
+
+/// 保留策略 PG ctid 批删方言分支：建表 → 插入过期/新鲜行 → purge → 断言只删过期
+#[cfg(feature = "retention")]
+#[tokio::test]
+async fn test_postgres_retention_purge_ctid() {
+    use dbnexus::domain::retention::{RetentionExecutor, RetentionPolicy};
+    use std::sync::Arc;
+
+    let (_container, url) = setup_postgres().await;
+    let pool = DbPool::new(&url).await.expect("pool");
+    let admin = pool.get_session("admin").await.expect("session");
+    admin
+        .execute_raw_ddl("CREATE TABLE retention_pg (id BIGINT PRIMARY KEY, created_at BIGINT)")
+        .await
+        .expect("create table");
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    for (id, ts) in [(1, now - 200 * 86_400), (2, now)] {
+        admin
+            .execute_raw(&format!(
+                "INSERT INTO retention_pg (id, created_at) VALUES ({id}, {ts})"
+            ))
+            .await
+            .expect("insert");
+    }
+    let executor = RetentionExecutor::new(
+        Arc::new(pool),
+        "retention_pg",
+        "admin",
+        RetentionPolicy::parse("90d").unwrap(),
+        "created_at",
+    )
+    .unwrap();
+    let report = executor.purge_expired(0).await.expect("purge");
+    assert_eq!(report.deleted_rows, 1);
+}

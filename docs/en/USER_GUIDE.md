@@ -1258,6 +1258,22 @@ By default `RlsPolicy` rejects multi-table statements (JOIN/subquery), fail-clos
 
 In `production`, a missing Required check yields `NonCompliant` (exit code 1), a missing Recommended check yields `Degraded` (exit 0), otherwise `Compliant` (exit 0). Invalid usage exits 2. The library function `dbnexus::security_posture(PostureProfile)` returns the same report.
 
+## Data Retention Policy (`retention` feature)
+
+Declare a table retention window on the entity and purge expired rows with a deterministic executor:
+
+```rust
+#[db_entity(table_name = "audit_logs", primary_key = "id", timestamps = true,
+            retention = "90d", retention_time_column = "created_at", archival = "cold_storage")]
+struct AuditLog { /* ... */ }
+```
+
+- Units: `d` (days), `w` (weeks), `mo` (30 days, a fixed approximation — prefer `d`/`w` for exact windows).
+- `retention` requires `timestamps = true` or an explicit `retention_time_column`; the column and `archival` labels must accompany a `retention` declaration. The macro emits `dbnexus_retention_meta() -> Option<(&str, &str, Option<&str>)>`.
+- Execution: `RetentionExecutor::new(pool, table, role, policy, time_column)` then `purge_expired(limit)` deletes rows older than `now - duration` in bounded batches (stops on first batch failure and reports already-deleted rows). `purge_expired_with_archive(limit, archiver)` hands expired rows to a callback and deletes only after the callback succeeds — no data loss on archive failure.
+- The execution role is explicit (no implicit admin); table/column names are validated as safe identifiers. Scheduling is external (cron / K8s CronJob / tokio interval) — the framework does not run a timer.
+- Boundary: this is time-window deletion, distinct from the audit module's `retention_count` (row-count window). `archival = "cold_storage"` is a declaration label only; the real archive target is supplied by the callback.
+
 ## Query Plan Regression Guard (`query-guard` feature)
 
 `dbnexus-cli query-guard` compares `EXPLAIN` plan signals against a baseline to catch degradations before deployment:
