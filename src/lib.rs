@@ -220,6 +220,7 @@ pub use crate::access::{
 #[cfg(feature = "permission")]
 pub use crate::access::{DryRunReport, OutcomeKind, QueryOutcome, dry_run_policies};
 pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
+#[cfg(feature = "permission")]
 pub use crate::access::{OriginConstraint, OriginMatch, QueryOrigin};
 #[cfg(feature = "entity-events")]
 pub use crate::database::entity_events::{

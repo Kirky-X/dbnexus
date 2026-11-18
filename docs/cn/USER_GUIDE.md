@@ -1230,6 +1230,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 > 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](CHANGELOG.md)（http-health 为 0.6.0-rc.6 新增）。
 
+## 策略干跑
+
+换装权限策略前，无需连库即可评估访问变化：
+
+```bash
+dbnexus-cli policy-dry-run \
+  --baseline current.yaml \
+  --candidate next.yaml \
+  --queries queries.sql \
+  --role reporting
+```
+
+`queries.sql` 每行一条 SQL（`--` 注释与空行跳过）。每条查询归为 `allow_to_allow` / `allow_to_deny`（回归，附缺失授权建议）/ `deny_to_allow` / `deny_to_deny` / `unparsable`。退出码：0 = 无回归，1 = 存在 `allow_to_deny`，2 = 文件/用法错误。省略 `--baseline` 即空（全拒绝）基线。
+
+覆盖边界：仅评估表级 RBAC（`RolePolicy::allows`，含通配符表）；RLS 谓词、查询来源形状约束与限流不在干跑范围内；报告是表访问差异，不是全语义保证。
+
 ## 查询来源治理
 
 `QueryOrigin` 在角色之外增加第二个治理维度。发放会话时显式声明来源：

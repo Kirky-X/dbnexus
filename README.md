@@ -172,6 +172,10 @@ For permission-denial behavior (unauthorized roles and unauthorized tables are b
 
 `default = []`: no default features; runtime, database driver and functional features must all be enabled explicitly; embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive at compile time. For all flags and presets — runtimes, drivers, core capabilities, data access, observability, data management, distributed capabilities, security and compliance — see [User Guide · Feature Flags Reference](docs/en/USER_GUIDE.md#feature-flags-reference).
 
+### Policy dry-run
+
+`dbnexus-cli policy-dry-run` diffs table-level RBAC between two policy YAML files over a SQL query list, reporting allow→deny regressions with missing-grant suggestions (exit 1 on regressions).
+
 ### Query origin governance
 
 `QueryOrigin` adds per-source query shape constraints (`max_rows` fail-closed, `deny_columns` removal) on top of role RBAC; declare the source with `get_session_with_origin` when issuing a session.

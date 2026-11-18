@@ -892,3 +892,108 @@ fn test_mcp_serve_invalid_endpoints_exit_2() {
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["error_code"], "mcp_endpoints_invalid_json");
 }
+
+/// 策略干跑：无回归退出码 0；构造回归退出码 1；缺文件/坏 YAML 退出码 2
+#[test]
+fn test_policy_dry_run_exit_codes() {
+    let dir = std::env::temp_dir().join(format!(
+        "dbnexus_policy_dryrun_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let candidate = dir.join("candidate.yaml");
+    let queries = dir.join("queries.sql");
+    std::fs::write(&candidate, "roles:\n  r:\n    tables:\n      - name: users\n        operations: [select]\n    origin_constraints: []\n").unwrap();
+    std::fs::write(&queries, "-- comment\nSELECT * FROM users\n\nSELECT 1\n").unwrap();
+
+    // 基线缺省 = 空策略；candidate 允许 users → DenyToAllow，无回归 → 0
+    let output = cli()
+        .args([
+            "policy-dry-run",
+            "--candidate",
+            candidate.to_str().unwrap(),
+            "--queries",
+            queries.to_str().unwrap(),
+            "--role",
+            "r",
+        ])
+        .output()
+        .expect("run policy-dry-run");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "no regressions should exit 0"
+    );
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["summary"]["allow_to_deny"], 0);
+    assert_eq!(
+        json["per_query"][0]["line"], 2,
+        "comment/blank line numbers preserved"
+    );
+
+    // 基线允许 orders、候选不允许 → AllowToDeny 回归 → 1
+    let baseline = dir.join("baseline.yaml");
+    std::fs::write(&baseline, "roles:\n  r:\n    tables:\n      - name: orders\n        operations: [select]\n    origin_constraints: []\n").unwrap();
+    std::fs::write(&queries, "SELECT * FROM orders\n").unwrap();
+    let output = cli()
+        .args([
+            "policy-dry-run",
+            "--candidate",
+            candidate.to_str().unwrap(),
+            "--baseline",
+            baseline.to_str().unwrap(),
+            "--queries",
+            queries.to_str().unwrap(),
+            "--role",
+            "r",
+        ])
+        .output()
+        .expect("run policy-dry-run");
+    assert_eq!(output.status.code(), Some(1), "regressions should exit 1");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["summary"]["allow_to_deny"], 1);
+    assert_eq!(json["per_query"][0]["kind"], "allow_to_deny");
+    assert!(
+        json["per_query"][0]["suggestion"]
+            .as_str()
+            .unwrap()
+            .contains("orders")
+    );
+
+    // 缺 candidate → 2
+    let output = cli()
+        .args([
+            "policy-dry-run",
+            "--candidate",
+            dir.join("missing.yaml").to_str().unwrap(),
+            "--queries",
+            queries.to_str().unwrap(),
+            "--role",
+            "r",
+        ])
+        .output()
+        .expect("run policy-dry-run");
+    assert_eq!(output.status.code(), Some(2));
+
+    // 坏 YAML → 2
+    std::fs::write(&candidate, "roles: [unclosed\n").unwrap();
+    let output = cli()
+        .args([
+            "policy-dry-run",
+            "--candidate",
+            candidate.to_str().unwrap(),
+            "--queries",
+            queries.to_str().unwrap(),
+            "--role",
+            "r",
+        ])
+        .output()
+        .expect("run policy-dry-run");
+    assert_eq!(output.status.code(), Some(2));
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}

@@ -1258,6 +1258,22 @@ By default `RlsPolicy` rejects multi-table statements (JOIN/subquery), fail-clos
 
 In `production`, a missing Required check yields `NonCompliant` (exit code 1), a missing Recommended check yields `Degraded` (exit 0), otherwise `Compliant` (exit 0). Invalid usage exits 2. The library function `dbnexus::security_posture(PostureProfile)` returns the same report.
 
+## Policy Dry-Run
+
+Before swapping a permission policy, evaluate how it changes access without connecting to a database:
+
+```bash
+dbnexus-cli policy-dry-run \
+  --baseline current.yaml \
+  --candidate next.yaml \
+  --queries queries.sql \
+  --role reporting
+```
+
+`queries.sql` holds one SQL per line (`--` comments and blank lines are skipped). Each query is classified as `allow_to_allow`, `allow_to_deny` (regression, with a missing-grant suggestion), `deny_to_allow`, `deny_to_deny`, or `unparsable`. Exit codes: 0 = no regressions, 1 = at least one `allow_to_deny`, 2 = file/usage error. A missing `--baseline` means an empty (deny-all) baseline.
+
+Coverage boundary: only table-level RBAC (`RolePolicy::allows`, including wildcard tables) is evaluated. RLS predicates, query-origin shape constraints and rate limits are not part of the dry run; treat the report as a table-access diff, not a full semantic guarantee.
+
 ## Query Origin Governance
 
 `QueryOrigin` adds a second governance dimension alongside roles. Declare the source when issuing a session:

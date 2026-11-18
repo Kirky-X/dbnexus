@@ -12,6 +12,7 @@ use dbnexus::i18n;
 use dbnexus::{DbError, DbPool, DbResult};
 use std::fs;
 #[cfg(any(feature = "migration", feature = "permission-engine"))]
+#[cfg(feature = "permission")]
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -130,6 +131,23 @@ enum Commands {
         /// 聚合到 production 判定档（缺省 development）
         #[arg(long, value_parser = ["development", "production"])]
         profile: Option<String>,
+    },
+
+    /// 权限策略干跑（纯评估，不连数据库；JSON 输出，退出码 0/1/2）
+    #[cfg(feature = "permission")]
+    PolicyDryRun {
+        /// 候选策略 YAML（必填）
+        #[arg(long)]
+        candidate: PathBuf,
+        /// 基线策略 YAML（缺省 = 空策略）
+        #[arg(long)]
+        baseline: Option<PathBuf>,
+        /// SQL 文件（每行一条；`--` 注释与空行跳过）
+        #[arg(long)]
+        queries: PathBuf,
+        /// 评估角色（必填）
+        #[arg(long)]
+        role: String,
     },
 
     /// MCP Server stdio 模式（工具受权限引擎约束；配置经环境变量装配）
@@ -482,7 +500,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let permission_check_free = matches!(cli.command, Commands::PermissionCheck { .. });
     #[cfg(not(feature = "permission-engine"))]
     let permission_check_free = false;
-    let doctor_free = matches!(cli.command, Commands::Doctor { .. });
+    let doctor_free = matches!(cli.command, Commands::Doctor { .. }) || {
+        #[cfg(feature = "permission")]
+        {
+            matches!(cli.command, Commands::PolicyDryRun { .. })
+        }
+        #[cfg(not(feature = "permission"))]
+        {
+            false
+        }
+    };
     #[cfg(feature = "mcp")]
     let mcp_serve_free = matches!(cli.command, Commands::McpServe { .. });
     #[cfg(not(feature = "mcp"))]
@@ -560,6 +587,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Doctor { profile } => {
             let code = run_doctor_json(profile.as_deref());
+            std::process::exit(code as i32);
+        }
+        #[cfg(feature = "permission")]
+        Commands::PolicyDryRun {
+            candidate,
+            baseline,
+            queries,
+            role,
+        } => {
+            let code = run_policy_dry_run(candidate, baseline.as_deref(), queries, role).await;
             std::process::exit(code as i32);
         }
         #[cfg(feature = "mcp")]
@@ -1770,6 +1807,103 @@ async fn run_mcp_serve() -> ExitCode {
     ExitCode::Ok
 }
 
+/// SQL 查询文件解析：每行一条，`--` 注释与空行跳过，保留原始行号
+#[cfg(feature = "permission")]
+fn parse_query_file(content: &str) -> Vec<(usize, String)> {
+    content
+        .lines()
+        .enumerate()
+        .filter_map(|(idx, line)| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with("--") {
+                None
+            } else {
+                Some((idx + 1, trimmed.to_string()))
+            }
+        })
+        .collect()
+}
+
+/// 权限策略干跑：读 YAML/查询文件 → 纯评估 → JSON 输出
+#[cfg(feature = "permission")]
+async fn run_policy_dry_run(
+    candidate: &Path,
+    baseline: Option<&Path>,
+    queries: &Path,
+    role: &str,
+) -> ExitCode {
+    use dbnexus::access::permission::PermissionConfig;
+    use dbnexus::dry_run_policies;
+
+    let candidate_yaml = match fs::read_to_string(candidate) {
+        Ok(content) => content,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "candidate_read_failed",
+                "file": candidate.display().to_string(), "error": e.to_string()
+            }));
+            return ExitCode::UsageError;
+        }
+    };
+    let candidate_config = match PermissionConfig::from_yaml_str(&candidate_yaml) {
+        Ok(config) => config,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "candidate_yaml_invalid",
+                "file": candidate.display().to_string(), "error": e.to_string()
+            }));
+            return ExitCode::UsageError;
+        }
+    };
+    let baseline_config = match baseline {
+        Some(path) => match fs::read_to_string(path) {
+            Ok(content) => match PermissionConfig::from_yaml_str(&content) {
+                Ok(config) => config,
+                Err(e) => {
+                    print_json(&serde_json::json!({
+                        "status": "error", "error_code": "baseline_yaml_invalid",
+                        "file": path.display().to_string(), "error": e.to_string()
+                    }));
+                    return ExitCode::UsageError;
+                }
+            },
+            Err(e) => {
+                print_json(&serde_json::json!({
+                    "status": "error", "error_code": "baseline_read_failed",
+                    "file": path.display().to_string(), "error": e.to_string()
+                }));
+                return ExitCode::UsageError;
+            }
+        },
+        None => PermissionConfig::default(),
+    };
+    let queries_content = match fs::read_to_string(queries) {
+        Ok(content) => content,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "queries_read_failed",
+                "file": queries.display().to_string(), "error": e.to_string()
+            }));
+            return ExitCode::UsageError;
+        }
+    };
+    let (lines, sqls): (Vec<usize>, Vec<String>) =
+        parse_query_file(&queries_content).into_iter().unzip();
+    let mut report = dry_run_policies(&baseline_config, &candidate_config, role, &sqls).await;
+    for (outcome, line) in report.per_query.iter_mut().zip(lines) {
+        outcome.line = line;
+    }
+
+    let regressions = report.summary.allow_to_deny;
+    let value = serde_json::to_value(&report).expect("DryRunReport must serialize");
+    print_json(&value);
+    if regressions > 0 {
+        ExitCode::RuntimeFailure
+    } else {
+        ExitCode::Ok
+    }
+}
+
 /// 安全姿态自审计（JSON 输出）
 ///
 /// 退出码：0 达标 / 1 production 档存在未满足 Required 项 / 2 用法错误
@@ -2532,6 +2666,18 @@ fn mask_url_in_text(text: &str, url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "permission")]
+    #[test]
+    fn test_parse_query_file_line_numbers() {
+        let content = "-- comment\nSELECT 1;\n\nSELECT * FROM users;\n-- trailing\n";
+        let parsed = parse_query_file(content);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].0, 2);
+        assert_eq!(parsed[0].1, "SELECT 1;");
+        assert_eq!(parsed[1].0, 4);
+        assert_eq!(parsed[1].1, "SELECT * FROM users;");
+    }
 
     // DOWN 提取（rollback 前置校验依赖的逻辑）
 
