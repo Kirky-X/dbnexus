@@ -52,6 +52,16 @@ pub use crate::database::sql_text::SqlBackend;
 ///
 /// `T` 为实体类型（`Serialize + DeserializeOwned`）。实现方决定存储后端
 /// （`JsonRepository` 为 DbPool JSON 行实现的参考实现）。
+
+/// 后端选型建议伴生函数（开发期辅助，不属 Repository trait 职责）
+#[cfg(feature = "backend-advisor")]
+pub async fn suggest_backend_for(
+    sql: &str,
+) -> crate::foundation::DbResult<crate::database::backend_advisor::BackendAdvice> {
+    crate::database::backend_advisor::suggest_backend(sql).await
+}
+
+/// 泛型仓储 trait：为实体类型提供受权限约束的 CRUD 能力。
 #[async_trait]
 pub trait Repository<T>: Send + Sync
 where

@@ -212,3 +212,34 @@ async fn test_macro_fragment_executes_end_to_end() {
 
     let _ = std::fs::remove_file(&path);
 }
+
+/// DSL / Repository 后端建议接线（双 feature）
+#[cfg(feature = "backend-advisor")]
+#[tokio::test]
+async fn test_query_fragment_and_repository_backend_suggestion() {
+    use dbnexus::database::query_dsl::{DslCondition, DslOp, QueryFragment};
+    use dbnexus::database::repository::suggest_backend_for;
+    use dbnexus::suggest_backend;
+
+    let mut fragment = QueryFragment::default();
+    fragment.table = Some("users".to_string());
+    fragment.columns = vec![];
+    fragment.conditions = vec![DslCondition {
+        column: "id".to_string(),
+        op: DslOp::Eq,
+        literal: "1".to_string(),
+    }];
+    let advice = fragment.suggest_backend().await.expect("fragment advice");
+    assert!(!advice.primary.reasons.is_empty());
+
+    let empty = QueryFragment::default();
+    assert!(empty.suggest_backend().await.is_none());
+
+    let direct = suggest_backend("SELECT * FROM users WHERE id = 1")
+        .await
+        .unwrap();
+    let via_repo = suggest_backend_for("SELECT * FROM users WHERE id = 1")
+        .await
+        .unwrap();
+    assert_eq!(direct, via_repo);
+}

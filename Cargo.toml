@@ -499,7 +499,7 @@ required-features = ["permission-facade", "sqlite", "runtime-tokio-rustls"]
 [[test]]
 name = "query_dsl_tests"
 path = "tests/query_dsl_tests.rs"
-required-features = ["query-dsl", "sqlite", "sql-parser", "runtime-tokio-rustls"]
+required-features = ["query-dsl", "sqlite", "sql-parser", "runtime-tokio-rustls", "backend-advisor", "repository"]
 
 # 实体事件总线 + Outbox（sqlite）
 [[test]]

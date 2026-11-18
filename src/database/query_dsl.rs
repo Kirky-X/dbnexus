@@ -105,6 +105,18 @@ pub fn ident_from_token(token: &str) -> String {
 }
 
 impl QueryFragment {
+    /// 基于片段 SQL 给后端建议（需 runtime；无表名时返回 None）
+    #[cfg(all(feature = "query-dsl", feature = "backend-advisor"))]
+    pub async fn suggest_backend(&self) -> Option<crate::database::backend_advisor::BackendAdvice> {
+        if self.table.is_none() {
+            return None;
+        }
+        let sql = self.to_sql().ok()?;
+        crate::database::backend_advisor::suggest_backend(&sql)
+            .await
+            .ok()
+    }
+
     /// 组装为 SELECT SQL
     ///
     /// 标识符（表名/投影列/条件列/排序列）逐一经白名单校验；非法标识符
