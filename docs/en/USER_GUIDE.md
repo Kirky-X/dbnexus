@@ -1258,6 +1258,28 @@ By default `RlsPolicy` rejects multi-table statements (JOIN/subquery), fail-clos
 
 In `production`, a missing Required check yields `NonCompliant` (exit code 1), a missing Recommended check yields `Degraded` (exit 0), otherwise `Compliant` (exit 0). Invalid usage exits 2. The library function `dbnexus::security_posture(PostureProfile)` returns the same report.
 
+## Backend Selection Advice (`backend-advisor` feature)
+
+`suggest_backend(sql) -> BackendAdvice` is a development-time heuristic (pure, zero IO) that ranks backends for a query shape. It never routes at runtime — route decisions stay in your configuration.
+
+```rust
+use dbnexus::suggest_backend;
+
+let advice = suggest_backend("SELECT department, COUNT(*) FROM employees GROUP BY department").await?;
+// advice.primary.backend == DatabaseType::DuckDb
+```
+
+| Query shape | Primary | Alternatives |
+|---|---|---|
+| Graph traversal (`MATCH (…)-[…]-(…)` / `CALL {`) | Ladybug | Neo4j |
+| Aggregation / GROUP BY / window functions | DuckDb | PostgreSQL, MySQL |
+| Writes with JOIN/CTE/subquery/bulk insert | PostgreSQL | MySQL |
+| Bulk insert (no server features) | DuckDb | PostgreSQL |
+| Single-table point lookup | SQLite | PostgreSQL |
+| Simple write / general relational | PostgreSQL | SQLite or MySQL |
+
+Three entry points: `suggest_backend(sql)`, `QueryFragment::suggest_backend()` (async; `None` when the fragment has no table), and `suggest_backend_for(sql)` (re-exported beside the `Repository` trait). Reasons are localized; every suggestion carries the hint "heuristic only; verify against your data scale and indexes". Unparsable relational SQL returns `Err` (no guessing); graph detection uses shape text matching (not a Cypher parser).
+
 ## Data Retention Policy (`retention` feature)
 
 Declare a table retention window on the entity and purge expired rows with a deterministic executor:

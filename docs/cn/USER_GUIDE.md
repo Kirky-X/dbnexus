@@ -1230,6 +1230,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 > 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](CHANGELOG.md)（http-health 为 0.6.0-rc.6 新增）。
 
+## 后端选型建议（`backend-advisor` 特性）
+
+`suggest_backend(sql) -> BackendAdvice` 是开发期启发式建议（纯函数、零 IO），按查询形状给后端排序。它不做运行时路由——路由决策权仍在你的配置。
+
+```rust
+use dbnexus::suggest_backend;
+
+let advice = suggest_backend("SELECT department, COUNT(*) FROM employees GROUP BY department").await?;
+// advice.primary.backend == DatabaseType::DuckDb
+```
+
+| 查询形态 | 首推 | 备选 |
+|---|---|---|
+| 图遍历（`MATCH (…)-[…]-(…)` / `CALL {`） | Ladybug | Neo4j |
+| 聚合 / GROUP BY / 窗口函数 | DuckDb | PostgreSQL, MySQL |
+| 带 JOIN/CTE/子查询/批量插入的写入 | PostgreSQL | MySQL |
+| 批量插入（无 server 特征） | DuckDb | PostgreSQL |
+| 单表点查 | SQLite | PostgreSQL |
+| 简单写入 / 通用关系型 | PostgreSQL | SQLite 或 MySQL |
+
+三个入口：`suggest_backend(sql)`、`QueryFragment::suggest_backend()`（异步；无表名时返回 `None`）、`suggest_backend_for(sql)`（在 `Repository` trait 旁 re-export）。理由经本地化；每条建议都带「仅为启发式；请结合实际数据规模与索引验证」提示。无法解析的关系型 SQL 返回 `Err`（不猜测）；图语句检测是形态文本匹配（非 Cypher 解析器）。
+
 ## 数据保留策略（`retention` 特性）
 
 在实体上声明表级保留窗口，用确定性执行件清理到期行：

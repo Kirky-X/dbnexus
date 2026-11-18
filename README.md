@@ -172,6 +172,10 @@ For permission-denial behavior (unauthorized roles and unauthorized tables are b
 
 `default = []`: no default features; runtime, database driver and functional features must all be enabled explicitly; embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive at compile time. For all flags and presets — runtimes, drivers, core capabilities, data access, observability, data management, distributed capabilities, security and compliance — see [User Guide · Feature Flags Reference](docs/en/USER_GUIDE.md#feature-flags-reference).
 
+### Backend selection advice
+
+The `backend-advisor` feature offers development-time backend suggestions by query shape (`suggest_backend`), with no runtime auto-routing.
+
 ### Data retention policy
 
 The `retention` feature adds `#[db_entity(retention = "90d")]` declarations plus a deterministic batch-purge executor with archive-first semantics.
