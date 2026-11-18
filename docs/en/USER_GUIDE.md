@@ -1230,6 +1230,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 > 🆕 marks capabilities added in 0.6.0-rc.4 and later; see the [Changelog](CHANGELOG.md) for per-item versions (http-health added in 0.6.0-rc.6).
 
+## Security Posture Self-Audit
+
+`dbnexus-cli doctor` reports the security features compiled into the current build as JSON. Use `--profile development` (default, report only) or `--profile production` (judge Required checks).
+
+| Check ID | Feature | Severity |
+|---|---|---|
+| `rbac` | `permission` | Required |
+| `injection-detection` | `sql-parser` | Required |
+| `policy-cache` | `cache` | Recommended |
+| `rls-and-masking` | `data-protection` | Recommended |
+| `pdp` | `permission-engine` | Info |
+| `unified-facade` | `permission-facade` | Info |
+| `audit` | `audit` | Recommended |
+| `jwt-auth` | `authentication` | Recommended |
+| `drivers` | any relational driver | Info |
+
+In `production`, a missing Required check yields `NonCompliant` (exit code 1), a missing Recommended check yields `Degraded` (exit 0), otherwise `Compliant` (exit 0). Invalid usage exits 2. The library function `dbnexus::security_posture(PostureProfile)` returns the same report.
+
 ## Feature Flags Reference
 
 `default = []`: no default features; runtime, database driver and functional features must all be enabled explicitly. Embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive; mixing them fails the build.

@@ -212,6 +212,7 @@ Permission control, security checks, authentication:
 | `injection_engine.rs` | the `InjectionEngine` unified injection detection engine (a single registry for relational / DDL / graph) | `sql-parser` |
 | `security/ddl_guard.rs` | `DdlGuard` (AST validation), the `DdlGuardPolicy` port and audit/dry-run decorators | `sql-parser` |
 | `security/sensitive.rs` | `SensitiveMasker` data masking | core |
+| `security/posture.rs` | `security_posture` compile-time feature posture aggregation | core |
 | `authentication/` | `AuthenticationManager`, `JwtManager`, `PasswordHasher` | `authentication` |
 | `permission_engine.rs` | `PolicyDecisionPoint` (RBAC + ABAC policy decision point) | `permission-engine` |
 | `permission_facade.rs` | the `PermissionFacade` unified permission facade (RBAC + masking + RLS combined swap) | `permission-facade` |

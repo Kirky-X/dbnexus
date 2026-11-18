@@ -172,6 +172,25 @@ For permission-denial behavior (unauthorized roles and unauthorized tables are b
 
 `default = []`: no default features; runtime, database driver and functional features must all be enabled explicitly; embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive at compile time. For all flags and presets — runtimes, drivers, core capabilities, data access, observability, data management, distributed capabilities, security and compliance — see [User Guide · Feature Flags Reference](docs/en/USER_GUIDE.md#feature-flags-reference).
 
+### Security posture self-audit
+
+Run `dbnexus-cli doctor` to report which security features are compiled into the current build (JSON output).
+`--profile production` judges the Required checks (`rbac`, `injection-detection`); exit code 0 means compliant, 1 means a Required check is missing, and 2 means a usage error.
+
+| Check ID | Feature | Severity |
+|---|---|---|
+| `rbac` | `permission` | Required |
+| `injection-detection` | `sql-parser` | Required |
+| `policy-cache` | `cache` | Recommended |
+| `rls-and-masking` | `data-protection` | Recommended |
+| `pdp` | `permission-engine` | Info |
+| `unified-facade` | `permission-facade` | Info |
+| `audit` | `audit` | Recommended |
+| `jwt-auth` | `authentication` | Recommended |
+| `drivers` | any relational driver | Info |
+
+The library API `dbnexus::security_posture(profile)` returns the same report for embedding in deployment checks.
+
 ---
 
 ## 📚 Documentation
