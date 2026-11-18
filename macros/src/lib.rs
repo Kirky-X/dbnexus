@@ -37,6 +37,12 @@ struct DbEntityArgs {
     has_cache: bool,
     /// audit 参数已解析（可选）
     has_audit: bool,
+    /// 保留策略声明（如 "90d"）
+    retention: Option<String>,
+    /// 到期判定时间列（缺省 created_at）
+    retention_time_column: Option<String>,
+    /// 归档目标标签（仅声明）
+    archival: Option<String>,
     /// permissions 嵌套参数原始 token
     permissions_tokens: Option<proc_macro2::TokenStream>,
     /// cache 嵌套参数原始 token
@@ -206,6 +212,51 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
                     ));
                 }
             }
+            // retention = "90d"
+            syn::Meta::NameValue(nv) if nv.path.is_ident("retention") => {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }) = &nv.value
+                {
+                    result.retention = Some(s.value());
+                } else {
+                    return Err(syn::Error::new(
+                        nv.value.span(),
+                        "retention must be a string literal",
+                    ));
+                }
+            }
+            // retention_time_column = "created_at"
+            syn::Meta::NameValue(nv) if nv.path.is_ident("retention_time_column") => {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }) = &nv.value
+                {
+                    result.retention_time_column = Some(s.value());
+                } else {
+                    return Err(syn::Error::new(
+                        nv.value.span(),
+                        "retention_time_column must be a string literal",
+                    ));
+                }
+            }
+            // archival = "cold_storage"
+            syn::Meta::NameValue(nv) if nv.path.is_ident("archival") => {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }) = &nv.value
+                {
+                    result.archival = Some(s.value());
+                } else {
+                    return Err(syn::Error::new(
+                        nv.value.span(),
+                        "archival must be a string literal",
+                    ));
+                }
+            }
             // soft_delete = true|false
             syn::Meta::NameValue(nv) if nv.path.is_ident("soft_delete") => {
                 if let syn::Expr::Lit(syn::ExprLit {
@@ -263,7 +314,7 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
                     format!(
                         "unknown #[db_entity] parameter '{}', expected one of: \
                          table_name, primary_key, timestamps, soft_delete, validate, \
-                         hooks, permissions, cache, audit",
+                         hooks, permissions, cache, audit, retention, retention_time_column, archival",
                         name
                     ),
                 ));
@@ -723,6 +774,26 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     ))
                 }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    let retention_meta_tokens = if let Some(ref decl) = entity_args.retention {
+        let time_col = entity_args
+            .retention_time_column
+            .as_deref()
+            .unwrap_or("created_at");
+        let archival = entity_args.archival.as_deref();
+        let archival_tokens = match archival {
+            Some(a) => quote! { Some(#a) },
+            None => quote! { None },
+        };
+        quote! {
+            /// 实体声明的数据保留策略元数据：(声明, 时间列, 归档标签)
+            pub fn dbnexus_retention_meta() -> Option<(&'static str, &'static str, Option<&'static str>)> {
+                Some((#decl, #time_col, #archival_tokens))
             }
         }
     } else {
@@ -1642,6 +1713,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             #permissions_tokens
             #cache_tokens
             #audit_tokens
+            #retention_meta_tokens
         }
 
         // 宏生成 `impl ActiveModelBehavior for ActiveModel`
