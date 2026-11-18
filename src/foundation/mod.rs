@@ -20,7 +20,9 @@ pub use config::{CacheConfig, ConfigError, DatabaseType, DbConfig, PoolConfig};
 pub use error::PermissionError;
 #[cfg(feature = "permission")]
 pub use error::PermissionResult;
-pub use error::{AuditError, AuditResult, DbError, DbResult, MigrationError, MigrationResult};
+pub use error::{
+    AuditError, AuditResult, DbError, DbResult, DenialReason, MigrationError, MigrationResult,
+};
 pub use error::{ConfigResult, PoolError, PoolResult};
 pub use sea_orm::entity::prelude::{ActiveModelTrait, EntityTrait};
 pub use sea_orm::{Condition, Set};

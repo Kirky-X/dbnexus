@@ -41,9 +41,7 @@ impl Session {
         #[cfg(feature = "sql-parser")]
         {
             if is_ddl_operation(sql) {
-                return Err(DbError::Permission(i18n::t_simple(
-                    "session-ddl-not-allowed-context",
-                )));
+                return Err(crate::foundation::DenialReason::DdlForbidden.into());
             }
         }
 
@@ -72,9 +70,9 @@ impl Session {
                             // 解析成功但是不支持的语句类型（DDL/DCL/Transaction），
                             // 这些情况需要拒绝执行以确保安全
                             _ => {
-                                return Err(DbError::Permission(i18n::t_simple(
-                                    "session-permission-table-name-required",
-                                )));
+                                return Err(
+                                    crate::foundation::DenialReason::UnsupportedStatement.into()
+                                );
                             }
                         };
 
@@ -85,15 +83,15 @@ impl Session {
                             // admin 有完全权限，跳过检查
                         } else {
                             if parsed.all_table_names.is_empty() {
-                                return Err(DbError::Permission(i18n::t_simple(
-                                    "session-permission-table-extract-failed",
-                                )));
+                                return Err(
+                                    crate::foundation::DenialReason::TableExtractFailed.into()
+                                );
                             }
                             for table in &parsed.all_table_names {
                                 if table.is_empty() || is_invalid_table_name(table) {
-                                    return Err(DbError::Permission(i18n::t_simple(
-                                        "session-permission-table-extract-failed",
-                                    )));
+                                    return Err(
+                                        crate::foundation::DenialReason::TableExtractFailed.into(),
+                                    );
                                 }
                             }
 
@@ -118,9 +116,7 @@ impl Session {
                                     &[("role", sanitize_log_field(&self.role))]
                                 )
                             );
-                            return Err(DbError::Permission(i18n::t_simple(
-                                "session-permission-parse-failed",
-                            )));
+                            return Err(crate::foundation::DenialReason::SqlParseFailed.into());
                         }
                     }
                 }
@@ -246,11 +242,18 @@ impl Session {
         let parsed = parser
             .parse_single(sql)
             .await
-            .map_err(|_| DbError::Permission(i18n::t_simple("session-rls-parse-failed")))?;
+            .map_err(|_| DbError::PermissionDenied {
+                reason: crate::foundation::DenialReason::RlsParseFailed,
+            })?;
         if parsed.all_table_names.len() > 1 {
-            return Err(DbError::Permission(rls_multi_table_error(
-                &parsed.all_table_names,
-            )));
+            return Err(crate::foundation::DenialReason::RlsMultiTableUnsupported {
+                tables: parsed
+                    .all_table_names
+                    .iter()
+                    .map(|t| sanitize_log_field(t))
+                    .collect(),
+            }
+            .into());
         }
         // 局部引入：SqlOperationType 在 permission 组合下由上层导入，
         // 此处需在 data-protection 单独启用时也可用
@@ -272,7 +275,16 @@ impl Session {
                 "{}",
                 i18n::t("session-log-rls-rejected", &[("error", e.to_string())])
             );
-            DbError::Permission(i18n::t_simple("session-rls-not-applicable"))
+            crate::foundation::DenialReason::RlsPredicateRejected {
+                table: sanitize_log_field(
+                    parsed
+                        .all_table_names
+                        .first()
+                        .map(String::as_str)
+                        .unwrap_or(""),
+                ),
+            }
+            .into()
         })
     }
 

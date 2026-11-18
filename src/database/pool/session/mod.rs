@@ -372,10 +372,10 @@ fn is_invalid_table_name(table_name: &str) -> bool {
 /// 统一 "Permission denied for {action} on {table}" 错误消息格式，
 /// 避免在多处调用点重复 `DbError::Permission(format!(...))` 模板。
 #[cfg(feature = "permission")]
-fn permission_denied(
+fn permission_denied_log(
     action: &(impl std::fmt::Display + ?Sized),
     table: &(impl std::fmt::Display + ?Sized),
-) -> DbError {
+) {
     log::warn!(
         "{}",
         i18n::t(
@@ -386,10 +386,40 @@ fn permission_denied(
             ]
         )
     );
+}
+
+#[cfg(feature = "permission")]
+#[allow(dead_code)]
+fn permission_denied(
+    action: &(impl std::fmt::Display + ?Sized),
+    table: &(impl std::fmt::Display + ?Sized),
+) -> DbError {
+    permission_denied_log(action, table);
     DbError::Permission(i18n::t(
         "session-permission-denied",
         &[("action", action.to_string()), ("table", table.to_string())],
     ))
+}
+
+/// 构造带结构化原因码的权限拒绝错误（日志输出与既有 permission_denied 一致）
+#[cfg(feature = "permission")]
+async fn permission_denied_with_reason(
+    ctx: &PermissionContext,
+    action: &PermissionAction,
+    table: &str,
+) -> DbError {
+    permission_denied_log(action, table);
+    let reason = if ctx.has_role_policy(ctx.role()).await {
+        crate::foundation::DenialReason::TableNotInPolicy {
+            table: sanitize_log_field(table),
+            action: sanitize_log_field(&action.to_string()),
+        }
+    } else {
+        crate::foundation::DenialReason::RoleNotDefined {
+            role: sanitize_log_field(ctx.role()),
+        }
+    };
+    DbError::PermissionDenied { reason }
 }
 
 /// 构造速率限制拒绝错误（HTTP 429 语义，区别于策略拒绝的
@@ -421,7 +451,7 @@ async fn check_table_or_error(
 ) -> Result<(), DbError> {
     match ctx.check_table_access_decision(table, action).await {
         TableAccessDecision::Allowed => Ok(()),
-        TableAccessDecision::Denied => Err(permission_denied(action, table)),
+        TableAccessDecision::Denied => Err(permission_denied_with_reason(ctx, action, table).await),
         TableAccessDecision::RateLimited { retry_after } => Err(rate_limited_error(retry_after)),
     }
 }

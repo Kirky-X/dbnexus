@@ -229,8 +229,11 @@ async fn test_session_execute_raw_rejects_ddl_under_sql_parser() {
     );
     let err = result.unwrap_err();
     assert!(
-        matches!(err, DbError::Permission(ref msg) if msg.contains("DDL")),
-        "expected Permission DDL error, got {:?}",
+        matches!(
+            &err,
+            DbError::PermissionDenied { reason } if reason.reason_code() == "DDL_FORBIDDEN"
+        ),
+        "expected DDL_FORBIDDEN structured denial, got {:?}",
         err
     );
 }

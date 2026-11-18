@@ -1465,7 +1465,12 @@ roles:
             .await
             .expect_err("an unlisted table must be denied");
         assert!(
-            matches!(err, crate::foundation::DbError::Permission(_)),
+            matches!(
+                &err,
+                crate::foundation::DbError::PermissionDenied { reason }
+                    if reason.reason_code() == "TABLE_NOT_IN_POLICY"
+                        || reason.reason_code() == "ROLE_NOT_DEFINED"
+            ),
             "got {err:?}"
         );
     }
@@ -1479,7 +1484,12 @@ roles:
             .await
             .expect_err("unlisted table must be denied");
         assert!(
-            matches!(err, crate::foundation::DbError::Permission(_)),
+            matches!(
+                &err,
+                crate::foundation::DbError::PermissionDenied { reason }
+                    if reason.reason_code() == "TABLE_NOT_IN_POLICY"
+                        || reason.reason_code() == "ROLE_NOT_DEFINED"
+            ),
             "got {err:?}"
         );
     }
@@ -1493,7 +1503,12 @@ roles:
             .await
             .expect_err("join on unlisted table must be denied");
         assert!(
-            matches!(err, crate::foundation::DbError::Permission(_)),
+            matches!(
+                &err,
+                crate::foundation::DbError::PermissionDenied { reason }
+                    if reason.reason_code() == "TABLE_NOT_IN_POLICY"
+                        || reason.reason_code() == "ROLE_NOT_DEFINED"
+            ),
             "got {err:?}"
         );
     }
@@ -1507,7 +1522,12 @@ roles:
             .await
             .expect_err("insert not in operations must be denied");
         assert!(
-            matches!(err, crate::foundation::DbError::Permission(_)),
+            matches!(
+                &err,
+                crate::foundation::DbError::PermissionDenied { reason }
+                    if reason.reason_code() == "TABLE_NOT_IN_POLICY"
+                        || reason.reason_code() == "ROLE_NOT_DEFINED"
+            ),
             "got {err:?}"
         );
     }
@@ -1520,8 +1540,11 @@ roles:
             .execute_raw("SELECT 1")
             .await
             .expect_err("table-less statement must be denied for non-admin");
-        let msg = err.message();
-        assert!(msg.contains("Failed to extract table name"), "got: {msg}");
+        let reason = match &err {
+            crate::foundation::DbError::PermissionDenied { reason } => reason,
+            _ => panic!("expected structured denial, got {err:?}"),
+        };
+        assert_eq!(reason.reason_code(), "TABLE_EXTRACT_FAILED");
     }
 
     #[tokio::test]
@@ -1532,8 +1555,11 @@ roles:
             .execute_raw("GRANT SELECT ON users TO role2")
             .await
             .expect_err("DCL must be denied for non-admin");
-        let msg = err.message();
-        assert!(msg.contains("valid table name"), "got: {msg}");
+        let reason = match &err {
+            crate::foundation::DbError::PermissionDenied { reason } => reason,
+            _ => panic!("expected structured denial, got {err:?}"),
+        };
+        assert_eq!(reason.reason_code(), "UNSUPPORTED_STATEMENT");
     }
 
     #[tokio::test]
@@ -1544,8 +1570,11 @@ roles:
             .execute_raw("SELEC bogus FROM nowhere")
             .await
             .expect_err("unparsable SQL must be denied for non-admin");
-        let msg = err.message();
-        assert!(msg.contains("Failed to parse SQL statement"), "got: {msg}");
+        let reason = match &err {
+            crate::foundation::DbError::PermissionDenied { reason } => reason,
+            _ => panic!("expected structured denial, got {err:?}"),
+        };
+        assert_eq!(reason.reason_code(), "SQL_PARSE_FAILED");
     }
 
     #[tokio::test]

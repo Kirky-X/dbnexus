@@ -698,10 +698,12 @@ async fn test_raw_write_path_is_row_level_scoped() {
         .execute_raw("UPDATE orders SET amount = 1.0 WHERE id IN (SELECT id FROM orders)")
         .await
         .expect_err("a multi-table statement must be rejected");
-    assert!(
-        err.to_string().contains("row-level security"),
-        "unexpected error: {err}"
-    );
+    match &err {
+        dbnexus::DbError::PermissionDenied { reason } => {
+            assert_eq!(reason.reason_code(), "RLS_MULTI_TABLE_UNSUPPORTED");
+        }
+        _ => panic!("expected structured RLS denial, got {err:?}"),
+    }
 
     let _ = std::fs::remove_file(&db_path);
 }
