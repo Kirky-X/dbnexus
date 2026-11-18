@@ -179,6 +179,9 @@ pub struct Session {
     /// 角色
     role: String,
 
+    /// 查询来源（会话发放时声明；人类/服务/具名 Agent）
+    origin: crate::access::permission::QueryOrigin,
+
     /// 是否 admin 角色（`new` 时预计算的快照；`role` 与 `pool_inner.admin_role`
     /// 构造后均不可变，热路径（每条语句的权限检查）免字符串比较）
     is_admin: bool,
@@ -210,6 +213,7 @@ impl Session {
         connection: DbConnection,
         pool_inner: Arc<DbPoolInner>,
         role: String,
+        origin: crate::access::permission::QueryOrigin,
     ) -> Self {
         #[cfg(feature = "permission")]
         let permission_ctx = PermissionContext::new(role.clone(), pool_inner.policy_cache.clone());
@@ -227,6 +231,7 @@ impl Session {
             connection: Some(connection),
             pool_inner,
             role,
+            origin,
             is_admin,
             #[cfg(feature = "permission")]
             permission_ctx,
@@ -248,6 +253,11 @@ impl Session {
     /// 获取角色
     pub fn role(&self) -> &str {
         &self.role
+    }
+
+    /// 获取查询来源
+    pub fn origin(&self) -> &crate::access::permission::QueryOrigin {
+        &self.origin
     }
 
     /// 获取权限上下文

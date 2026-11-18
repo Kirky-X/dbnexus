@@ -64,6 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_role(
             "admin",
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".to_string(),
                     operations: vec![
@@ -82,6 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_role(
             "manager",
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![
                     TablePermission {
                         name: "users".to_string(),
@@ -109,6 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_role(
             "guest",
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "users".to_string(),
                     operations: vec![PermissionAction::Select],

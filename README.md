@@ -172,6 +172,10 @@ For permission-denial behavior (unauthorized roles and unauthorized tables are b
 
 `default = []`: no default features; runtime, database driver and functional features must all be enabled explicitly; embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive at compile time. For all flags and presets — runtimes, drivers, core capabilities, data access, observability, data management, distributed capabilities, security and compliance — see [User Guide · Feature Flags Reference](docs/en/USER_GUIDE.md#feature-flags-reference).
 
+### Query origin governance
+
+`QueryOrigin` adds per-source query shape constraints (`max_rows` fail-closed, `deny_columns` removal) on top of role RBAC; declare the source with `get_session_with_origin` when issuing a session.
+
 ### MCP tool surface (`mcp`)
 
 `dbnexus-cli mcp-serve` starts a stdio MCP server whose tools are bound to the permission engine: `dbnexus_query` (whitelisted table/columns, filters and bounded pagination via `DataApiGateway`), `dbnexus_schema` (declared endpoint metadata only), and `dbnexus_explain` (permission-check preview, no SQL execution). The execution role and endpoints are configured through `DBNEXUS_MCP_*` environment variables; a missing role is fail-closed.

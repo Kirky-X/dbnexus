@@ -654,6 +654,7 @@ impl Session {
                 }
                 #[cfg(feature = "data-protection")]
                 self.apply_masking(&mut out).await;
+                self.apply_origin_constraints(&mut out).await?;
                 Ok(out)
             }
             #[cfg(feature = "sqlite")]
@@ -675,6 +676,7 @@ impl Session {
                     rows.iter().map(|r| sqlite_row_to_json(r, &cols)).collect();
                 #[cfg(feature = "data-protection")]
                 self.apply_masking(&mut out).await;
+                self.apply_origin_constraints(&mut out).await?;
                 Ok(out)
             }
             _ => Err(DbError::Query(i18n::t_simple(
@@ -682,6 +684,58 @@ impl Session {
             ))),
         }
         // 所有分支均已 return（postgres/sqlite 成功路径、其他方言 Err）
+    }
+
+    /// 查询来源形状约束：max_rows 超限拒绝（不截断），deny_columns 行集后移除
+    #[cfg(all(feature = "permission", any(feature = "postgres", feature = "sqlite")))]
+    async fn apply_origin_constraints(&self, rows: &mut [serde_json::Value]) -> DbResult<()> {
+        use crate::access::permission::resolve_origin_constraints;
+        if self.is_admin {
+            return Ok(());
+        }
+        let policy = self.permission_ctx.effective_policy().await;
+        let Some(policy) = policy else {
+            return Ok(());
+        };
+        let limits = resolve_origin_constraints(&policy, &self.origin);
+        if limits.invalid_column {
+            log::warn!("{}", i18n::t_simple("origin-column-denied"));
+            return Err(DbError::Permission(i18n::t_simple("origin-column-denied")));
+        }
+        if let Some(max) = limits.max_rows
+            && rows.len() as u64 > max
+        {
+            log::warn!(
+                "{}",
+                i18n::t("origin-rows-exceeded", &[("max_rows", max.to_string())])
+            );
+            self.audit_origin_event("origin_rows_exceeded", &format!("max_rows={max}"));
+            return Err(DbError::Permission(i18n::t(
+                "origin-rows-exceeded",
+                &[("max_rows", max.to_string())],
+            )));
+        }
+        if !limits.deny_columns.is_empty() {
+            let removed = remove_json_columns(rows, &limits.deny_columns);
+            if removed > 0 {
+                log::warn!("{}", i18n::t_simple("origin-column-denied"));
+                self.audit_origin_event("origin_column_denied", &format!("columns={removed}"));
+            }
+        }
+        Ok(())
+    }
+
+    /// 来源约束审计（无 audit feature 时 no-op，日志已在上层输出）
+    #[cfg(all(feature = "permission", any(feature = "postgres", feature = "sqlite")))]
+    fn audit_origin_event(&self, _kind: &'static str, _detail: &str) {
+        // 进程级审计环 + domain/audit 由统一 hook 承担；见 audit_origin_* 事件
+        #[cfg(feature = "audit")]
+        super::super::audit::record_origin_audit(
+            &self.role,
+            &format!("{:?}", self.origin),
+            _kind,
+            _detail,
+        );
     }
 
     /// 查询出口字段脱敏
@@ -1094,4 +1148,20 @@ fn rls_rejection_to_error(
         }
         .into(),
     }
+}
+
+/// 从行集 JSON 中移除指定列（列不存在时静默跳过）
+#[cfg(all(feature = "permission", any(feature = "postgres", feature = "sqlite")))]
+fn remove_json_columns(rows: &mut [serde_json::Value], columns: &[String]) -> usize {
+    let mut removed = 0;
+    for row in rows {
+        if let Some(obj) = row.as_object_mut() {
+            for col in columns {
+                if obj.remove(col).is_some() {
+                    removed += 1;
+                }
+            }
+        }
+    }
+    removed
 }

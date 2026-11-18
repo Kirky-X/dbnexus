@@ -58,6 +58,7 @@ fn test_rbac_inheritance_multi_level_chain_grants_access() {
     provider.add_role(
         "base".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "common".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -68,6 +69,7 @@ fn test_rbac_inheritance_multi_level_chain_grants_access() {
     provider.add_role(
         "intermediate".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "intermediate_table".to_string(),
                 operations: vec![PermissionAction::Select, PermissionAction::Insert],
@@ -78,6 +80,7 @@ fn test_rbac_inheritance_multi_level_chain_grants_access() {
     provider.add_role(
         "top".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "top_table".to_string(),
                 operations: vec![
@@ -123,6 +126,7 @@ fn test_rbac_inheritance_deep_chain_grants_access() {
         provider.add_role(
             format!("level_{}", i),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: format!("table_{}", i),
                     operations: vec![PermissionAction::Select],
@@ -155,6 +159,7 @@ fn test_rbac_inheritance_multiple_parents_grants_access() {
     provider.add_role(
         "role_a".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "table_a".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -165,6 +170,7 @@ fn test_rbac_inheritance_multiple_parents_grants_access() {
     provider.add_role(
         "role_b".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "table_b".to_string(),
                 operations: vec![PermissionAction::Insert],
@@ -175,6 +181,7 @@ fn test_rbac_inheritance_multiple_parents_grants_access() {
     provider.add_role(
         "role_c".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "table_c".to_string(),
                 operations: vec![PermissionAction::Update],
@@ -223,6 +230,7 @@ fn test_rbac_inheritance_diamond_structure_grants_access() {
     provider.add_role(
         "grandparent".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "gp_table".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -233,6 +241,7 @@ fn test_rbac_inheritance_diamond_structure_grants_access() {
     provider.add_role(
         "parent_a".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "a_table".to_string(),
                 operations: vec![PermissionAction::Insert],
@@ -243,6 +252,7 @@ fn test_rbac_inheritance_diamond_structure_grants_access() {
     provider.add_role(
         "parent_b".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "b_table".to_string(),
                 operations: vec![PermissionAction::Update],
@@ -253,6 +263,7 @@ fn test_rbac_inheritance_diamond_structure_grants_access() {
     provider.add_role(
         "child".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "child_table".to_string(),
                 operations: vec![PermissionAction::Delete],
@@ -300,6 +311,7 @@ fn test_direct_circular_inheritance() {
     provider.add_role(
         "role_a".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "table_a".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -310,6 +322,7 @@ fn test_direct_circular_inheritance() {
     provider.add_role(
         "role_b".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "table_b".to_string(),
                 operations: vec![PermissionAction::Insert],
@@ -339,6 +352,7 @@ fn test_indirect_circular_inheritance() {
         provider.add_role(
             name.to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: format!("{}_table", name),
                     operations: vec![PermissionAction::Select],
@@ -365,6 +379,7 @@ fn test_rbac_inheritance_self_reference_terminates_safely() {
     provider.add_role(
         "self_ref".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "test_table".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -391,6 +406,7 @@ fn test_rbac_permissions_multiple_parents_merges_access() {
     provider.add_role(
         "reader".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "shared_table".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -401,6 +417,7 @@ fn test_rbac_permissions_multiple_parents_merges_access() {
     provider.add_role(
         "writer".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "shared_table".to_string(),
                 operations: vec![PermissionAction::Insert, PermissionAction::Update],
@@ -445,6 +462,7 @@ fn test_rbac_permissions_child_role_extends_access() {
     provider.add_role(
         "parent".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "users".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -456,6 +474,7 @@ fn test_rbac_permissions_child_role_extends_access() {
     provider.add_role(
         "child".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "users".to_string(),
                 operations: vec![
@@ -499,6 +518,7 @@ fn test_rbac_inheritance_wildcard_grants_access() {
     provider.add_role(
         "limited".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "specific_table".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -571,6 +591,7 @@ fn test_rbac_cache_role_add_invalidates_cache() {
     provider.add_role(
         "child".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "new_table".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -846,6 +867,7 @@ fn test_rbac_concurrent_add_completes_safely() {
             p.add_role(
                 format!("concurrent_role_{}", i),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: format!("table_{}", i),
                         operations: vec![PermissionAction::Select],

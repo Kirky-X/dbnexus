@@ -3,6 +3,7 @@
 //! 大文件拆分：自 db_pool.rs 按职责纯移动的 impl 块（行为不变）。
 
 use super::*;
+use crate::access::QueryOrigin;
 
 impl DbPool {
     /// 设置缓存提供者（DI 注入点）
@@ -101,11 +102,23 @@ impl DbPool {
     /// ```
     ///
     pub async fn get_session(&self, role: &str) -> DbResult<Session> {
+        self.get_session_with_origin(role, QueryOrigin::Human).await
+    }
+
+    /// 以指定角色与查询来源发放会话
+    ///
+    /// 来源由调用方显式声明（信任边界与角色同层）；不声明的 `get_session`
+    /// 等价于 `QueryOrigin::Human`。
+    pub async fn get_session_with_origin(
+        &self,
+        role: &str,
+        origin: QueryOrigin,
+    ) -> DbResult<Session> {
         #[cfg(feature = "permission")]
         self.validate_role_name(role).await?;
 
         let connection = self.acquire_connection().await?;
-        let session = Session::new(connection, self.inner.clone(), role.to_string());
+        let session = Session::new(connection, self.inner.clone(), role.to_string(), origin);
 
         Ok(session)
     }

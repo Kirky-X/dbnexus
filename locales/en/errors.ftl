@@ -380,3 +380,7 @@ posture-effect-audit = Audit logging (AuditLogger/DbAuditStorage) is not compile
 posture-effect-jwt-auth = JWT dual-token authentication and bcrypt are not compiled in
 posture-effect-drivers = No relational database driver feature is compiled in
 session-log-rls-degraded = RLS degraded for table { $table }; controlled tables: { $tables }
+
+# --- Query origin governance ---
+origin-rows-exceeded = Query returned more than { $max_rows } rows; request rejected
+origin-column-denied = Query origin policy removed a denied column

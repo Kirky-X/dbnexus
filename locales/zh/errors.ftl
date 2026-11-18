@@ -376,3 +376,7 @@ posture-effect-audit = 未编译审计日志（AuditLogger/DbAuditStorage）
 posture-effect-jwt-auth = 未编译 JWT 双令牌认证与 bcrypt
 posture-effect-drivers = 未编译任何关系型数据库驱动 feature
 session-log-rls-degraded = 表 { $table } 的 RLS 已降级；受控表: { $tables }
+
+# --- 查询来源治理 ---
+origin-rows-exceeded = 查询返回行数超过 { $max_rows } 行；请求已拒绝
+origin-column-denied = 查询来源策略已移除被拒绝的列

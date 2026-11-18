@@ -1230,6 +1230,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 > 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](CHANGELOG.md)（http-health 为 0.6.0-rc.6 新增）。
 
+## 查询来源治理
+
+`QueryOrigin` 在角色之外增加第二个治理维度。发放会话时显式声明来源：
+
+```rust
+use dbnexus::{QueryOrigin, DbPool};
+
+let session = pool
+    .get_session_with_origin("reporting", QueryOrigin::Agent("claude-code".into()))
+    .await?;
+```
+
+随后 `Session::query_rows` 应用角色策略中匹配的 `origin_constraints`：
+
+```yaml
+roles:
+  reporting:
+    tables: [...]
+    origin_constraints:
+      - origin_match: agent        # human | service | agent | any
+        max_rows: 500             # 超限拒绝；绝不静默截断
+        deny_columns: [ssn, email] # 从结果行中移除
+```
+
+合成规则：Agent 来源优先匹配 `agent` 规则而非 `any`；多条命中取最小 `max_rows` 与 `deny_columns` 并集。admin 会话与无匹配约束的来源行为不变。
+
+边界：来源由调用方在会话发放处声明，属库的调用契约而非进程内强制身份；MCP 工具面是首个强制点。行数约束整条拒绝；被拒列在取回后移除（数据仍经过驱动层）。
+
 ## MCP 工具面（`mcp` 特性）
 
 `dbnexus-cli mcp-serve` 启动 stdio MCP server；工具受权限引擎约束，不暴露原始 SQL 工具：

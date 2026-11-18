@@ -64,6 +64,7 @@ impl RbacProvider {
         roles.insert(
             "admin".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".to_string(),
                     operations: vec![
@@ -147,6 +148,7 @@ mod tests {
         p.add_role(
             "editor".into(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "posts".into(),
                     operations: vec![PermissionAction::Select, PermissionAction::Insert],
@@ -163,6 +165,7 @@ mod tests {
         p.add_role(
             "user".into(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "articles".into(),
                     operations: vec![PermissionAction::Select],
@@ -185,6 +188,7 @@ mod tests {
         p.add_role(
             "admin".into(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".into(),
                     operations: vec![PermissionAction::Select, PermissionAction::Delete],

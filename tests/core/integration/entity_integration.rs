@@ -319,6 +319,7 @@ async fn test_entity_crud_full_operations() {
         roles: [(
             "admin".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".to_string(),
                     operations: vec![
@@ -396,6 +397,7 @@ async fn test_entity_transaction_with_permissions() {
         roles: [(
             "admin".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".to_string(),
                     operations: vec![

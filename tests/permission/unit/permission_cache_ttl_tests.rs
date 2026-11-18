@@ -25,6 +25,7 @@ use dbnexus::access::{
 
 fn sample_policy(table: &str, op: PermissionAction) -> RolePolicy {
     RolePolicy {
+        origin_constraints: vec![],
         tables: vec![TablePermission {
             name: table.to_string(),
             operations: vec![op],

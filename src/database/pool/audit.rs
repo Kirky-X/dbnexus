@@ -143,6 +143,12 @@ pub(super) fn warn_and_record_default_admin_role(admin_role: &str) {
     }
 }
 
+/// 记录查询来源约束触发事件（行数拒绝/列移除）到进程级审计环
+#[cfg(feature = "audit")]
+pub(crate) fn record_origin_audit(role: &str, origin: &str, kind: &'static str, detail: &str) {
+    record_admin_bypass(kind, role, "-", &format!("{origin}:{detail}"));
+}
+
 /// 记录一条安全审计事件到进程级审计环
 ///
 /// 环满时丢弃最旧事件；总计数（含被丢弃事件）单调递增，供

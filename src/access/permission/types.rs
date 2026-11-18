@@ -73,11 +73,117 @@ pub struct TablePermission {
     pub operations: Vec<PermissionAction>,
 }
 
+/// 查询来源（会话发放时声明，信任边界与角色同层）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum QueryOrigin {
+    /// 人类交互查询（默认）
+    #[default]
+    Human,
+    /// 自动化服务
+    Service,
+    /// 具名 Agent（名称仅用于审计归因）
+    Agent(String),
+}
+
+/// 来源匹配规则（策略侧）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum OriginMatch {
+    /// 任意来源（等价于无来源约束）
+    Any,
+    /// 人类来源
+    Human,
+    /// 服务来源
+    Service,
+    /// 任意 Agent(_)
+    Agent,
+}
+
+/// 按来源的查询形状约束
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OriginConstraint {
+    /// 匹配来源
+    pub origin_match: OriginMatch,
+    /// 最大返回行数，超限拒绝（None = 不限）
+    #[serde(default)]
+    pub max_rows: Option<u64>,
+    /// 拒绝列：命中列从返回行 JSON 中移除
+    #[serde(default)]
+    pub deny_columns: Vec<String>,
+}
+
+/// 合成后的来源形状约束（最具体匹配优先，多条取最严格）
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ResolvedOriginLimits {
+    /// 最大返回行数（None = 不限）
+    pub max_rows: Option<u64>,
+    /// 移除列集合（并集）
+    pub deny_columns: Vec<String>,
+    /// 是否存在非法列名（fail-closed 标记）
+    pub invalid_column: bool,
+}
+
+/// 合成角色策略对某来源的形状约束
+///
+/// 规则：`Agent(_)` 来源优先匹配 `OriginMatch::Agent` 规则（若存在则忽略 `Any`）；
+/// 多条命中取 `max_rows` 最小值与 `deny_columns` 并集。
+pub fn resolve_origin_constraints(
+    policy: &RolePolicy,
+    origin: &QueryOrigin,
+) -> ResolvedOriginLimits {
+    let mut limits = ResolvedOriginLimits::default();
+
+    let is_agent = matches!(origin, QueryOrigin::Agent(_));
+    let direct_match = |m: &OriginMatch| {
+        matches!(
+            (origin, m),
+            (QueryOrigin::Human, OriginMatch::Human)
+                | (QueryOrigin::Service, OriginMatch::Service)
+                | (QueryOrigin::Agent(_), OriginMatch::Agent)
+        )
+    };
+
+    // Agent 来源存在专属规则时，最具体优先：忽略 Any 规则
+    let agent_specific = is_agent
+        && policy
+            .origin_constraints
+            .iter()
+            .any(|c| direct_match(&c.origin_match));
+
+    for c in &policy.origin_constraints {
+        let hit = if agent_specific {
+            direct_match(&c.origin_match)
+        } else {
+            direct_match(&c.origin_match) || c.origin_match == OriginMatch::Any
+        };
+        if !hit {
+            continue;
+        }
+        if let Some(max) = c.max_rows {
+            limits.max_rows = Some(limits.max_rows.map_or(max, |m| m.min(max)));
+        }
+        for col in &c.deny_columns {
+            if !crate::database::identifier::is_safe_identifier(col) {
+                limits.invalid_column = true;
+            } else if !limits.deny_columns.contains(col) {
+                limits.deny_columns.push(col.clone());
+            }
+        }
+    }
+    limits
+}
+
 /// 角色策略
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RolePolicy {
     /// 角色允许的表权限
     pub tables: Vec<TablePermission>,
+    /// 按来源的查询形状约束（缺省空 = 对所有来源行为不变）
+    #[serde(default)]
+    pub origin_constraints: Vec<OriginConstraint>,
 }
 
 impl RolePolicy {
@@ -176,6 +282,7 @@ impl PermissionConfig {
             roles: HashMap::from([(
                 "admin".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "*".to_string(),
                         operations: vec![
@@ -365,6 +472,7 @@ mod tests {
     #[test]
     fn test_role_policy_allows() {
         let policy = RolePolicy {
+            origin_constraints: vec![],
             tables: vec![
                 TablePermission {
                     name: "users".to_string(),
@@ -438,6 +546,7 @@ mod tests {
                 map.insert(
                     "admin".to_string(),
                     RolePolicy {
+                        origin_constraints: vec![],
                         tables: vec![TablePermission {
                             name: "users".to_string(),
                             operations: vec![
@@ -452,6 +561,7 @@ mod tests {
                 map.insert(
                     "user".to_string(),
                     RolePolicy {
+                        origin_constraints: vec![],
                         tables: vec![TablePermission {
                             name: "users".to_string(),
                             operations: vec![PermissionAction::Select],
@@ -482,6 +592,7 @@ mod tests {
                 map.insert(
                     "admin".to_string(),
                     RolePolicy {
+                        origin_constraints: vec![],
                         tables: vec![TablePermission {
                             name: "*".to_string(),
                             operations: vec![PermissionAction::Select, PermissionAction::Insert],
@@ -506,6 +617,7 @@ mod tests {
                 map.insert(
                     "admin".to_string(),
                     RolePolicy {
+                        origin_constraints: vec![],
                         tables: vec![TablePermission {
                             name: "users".to_string(),
                             operations: vec![PermissionAction::Select, PermissionAction::Insert],
@@ -542,6 +654,7 @@ mod tests {
                 map.insert(
                     "admin".to_string(),
                     RolePolicy {
+                        origin_constraints: vec![],
                         tables: vec![], // 空表权限
                     },
                 );
@@ -568,6 +681,7 @@ mod tests {
                 map.insert(
                     "admin".to_string(),
                     RolePolicy {
+                        origin_constraints: vec![],
                         tables: vec![TablePermission {
                             name: "users".to_string(),
                             operations: vec![], // 空操作列表
@@ -673,6 +787,7 @@ mod tests {
         roles.insert(
             "admin".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".to_string(),
                     operations: all_actions.clone(),
@@ -682,6 +797,7 @@ mod tests {
         roles.insert(
             "readonly_admin".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".to_string(),
                     operations: vec![PermissionAction::Select],
@@ -691,6 +807,7 @@ mod tests {
         roles.insert(
             "users_admin".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "users".to_string(),
                     operations: all_actions,
@@ -724,6 +841,7 @@ mod tests {
         roles.insert(
             "admin".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "   ".to_string(),
                     operations: vec![PermissionAction::Select],
@@ -750,5 +868,76 @@ mod tests {
             .validate_with_first_error()
             .expect_err("validate_with_first_error must propagate the failure");
         assert!(first.contains("empty name"), "got: {first}");
+    }
+    #[test]
+    fn test_origin_types_and_backward_compat() {
+        // 旧 RolePolicy JSON（无 origin_constraints）反序列化成功且为空
+        let json = r#"{"tables":[{"name":"users","operations":["select"]}]}"#;
+        let policy: RolePolicy = serde_json::from_str(json).unwrap();
+        assert!(policy.origin_constraints.is_empty());
+
+        // Agent 蛇形序列化
+        let origin = QueryOrigin::Agent("claude-code".into());
+        assert_eq!(
+            serde_json::to_value(&origin).unwrap(),
+            serde_json::json!({"agent": "claude-code"})
+        );
+        assert_eq!(
+            serde_json::to_value(QueryOrigin::Human).unwrap(),
+            serde_json::json!("human")
+        );
+    }
+
+    #[test]
+    fn test_resolve_origin_constraints() {
+        use super::{OriginConstraint, OriginMatch};
+        let policy = RolePolicy {
+            tables: vec![],
+            origin_constraints: vec![
+                OriginConstraint {
+                    origin_match: OriginMatch::Any,
+                    max_rows: Some(1000),
+                    deny_columns: vec!["secret".into()],
+                },
+                OriginConstraint {
+                    origin_match: OriginMatch::Agent,
+                    max_rows: Some(100),
+                    deny_columns: vec!["email".into(), "secret".into()],
+                },
+            ],
+        };
+
+        // Human 命中 Any
+        let human = super::resolve_origin_constraints(&policy, &QueryOrigin::Human);
+        assert_eq!(human.max_rows, Some(1000));
+        assert_eq!(human.deny_columns, vec!["secret".to_string()]);
+
+        // Agent 命中专属规则（忽略 Any 的 max_rows）
+        let agent = super::resolve_origin_constraints(&policy, &QueryOrigin::Agent("bot".into()));
+        assert_eq!(agent.max_rows, Some(100));
+        assert_eq!(agent.deny_columns.len(), 2);
+
+        // 无约束默认
+        let empty = super::resolve_origin_constraints(
+            &RolePolicy {
+                origin_constraints: vec![],
+                tables: vec![],
+            },
+            &QueryOrigin::Service,
+        );
+        assert_eq!(empty.max_rows, None);
+        assert!(empty.deny_columns.is_empty());
+    }
+
+    #[test]
+    fn test_origin_i18n_keys_resolve() {
+        assert_ne!(
+            crate::i18n::t_simple("origin-rows-exceeded"),
+            "origin-rows-exceeded"
+        );
+        assert_ne!(
+            crate::i18n::t_simple("origin-column-denied"),
+            "origin-column-denied"
+        );
     }
 }

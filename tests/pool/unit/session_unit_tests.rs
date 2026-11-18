@@ -486,3 +486,115 @@ async fn test_explain_access_paths() {
         Some("SQL_PARSE_FAILED")
     );
 }
+
+/// 查询来源形状约束：max_rows 超限拒绝、deny_columns 列移除、Human 不受约束、admin 绕过
+#[cfg(all(feature = "permission", feature = "sql-parser", feature = "sqlite"))]
+#[tokio::test]
+async fn test_query_origin_shape_constraints() {
+    use dbnexus::DbPool;
+    use dbnexus::access::permission::{OriginConstraint, OriginMatch, QueryOrigin};
+    use std::collections::HashMap;
+
+    let table = common::generate_test_table_name("origin_shape");
+    let (_dir, pool) = {
+        let (mut config, dir) = common::get_test_config();
+        let db_path = std::env::temp_dir().join(format!(
+            "dbnexus_origin_shape_{}_{}.db",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_file(&db_path);
+        config.url = format!("sqlite:{}?mode=rwc", db_path.display());
+        config.admin_role = "admin".into();
+        let mut role = dbnexus::access::permission::RolePolicy {
+            tables: vec![dbnexus::access::permission::TablePermission {
+                name: table.clone(),
+                operations: vec![dbnexus::access::permission::PermissionAction::Select],
+            }],
+            origin_constraints: vec![OriginConstraint {
+                origin_match: OriginMatch::Agent,
+                max_rows: Some(1),
+                deny_columns: vec!["secret".into()],
+            }],
+        };
+        role.origin_constraints = vec![OriginConstraint {
+            origin_match: OriginMatch::Agent,
+            max_rows: Some(1),
+            deny_columns: vec!["secret".into()],
+        }];
+        let mut roles = HashMap::new();
+        roles.insert(
+            "admin".to_string(),
+            dbnexus::access::permission::RolePolicy {
+                tables: vec![dbnexus::access::permission::TablePermission {
+                    name: "*".into(),
+                    operations: vec![dbnexus::access::permission::PermissionAction::Select],
+                }],
+                origin_constraints: vec![],
+            },
+        );
+        roles.insert("reader".to_string(), role);
+        config.permissions_path = None;
+        let pool = DbPool::with_config(config).await.unwrap();
+        pool.set_permission_config(dbnexus::access::permission::PermissionConfig { roles })
+            .await
+            .unwrap();
+        (dir, pool)
+    };
+
+    let admin = pool.get_session("admin").await.unwrap();
+    admin
+        .execute_raw_ddl(&format!(
+            "CREATE TABLE {table} (id INTEGER PRIMARY KEY, secret TEXT)"
+        ))
+        .await
+        .unwrap();
+    admin
+        .execute_raw(&format!("INSERT INTO {table} (id, secret) VALUES (1, 'a')"))
+        .await
+        .unwrap();
+    admin
+        .execute_raw(&format!("INSERT INTO {table} (id, secret) VALUES (2, 'b')"))
+        .await
+        .unwrap();
+
+    // Agent 来源：2 行 > max_rows=1 → 拒绝，不返回部分行
+    let agent = pool
+        .get_session_with_origin("reader", QueryOrigin::Agent("bot".into()))
+        .await
+        .unwrap();
+    assert!(matches!(agent.origin(), QueryOrigin::Agent(_)));
+    let err = agent
+        .query_rows(&format!("SELECT * FROM {table}"))
+        .await
+        .expect_err("agent over max_rows must be denied");
+    assert!(
+        err.message().contains("more than 1"),
+        "got: {}",
+        err.message()
+    );
+
+    // Human 来源不受约束：两行全返，含 secret 列
+    let human = pool.get_session("reader").await.unwrap();
+    assert_eq!(*human.origin(), QueryOrigin::Human);
+    let rows = human
+        .query_rows(&format!("SELECT * FROM {table}"))
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+    assert!(rows[0].get("secret").is_some());
+
+    // admin 绕过（即使 Agent 来源）
+    let admin_agent = pool
+        .get_session_with_origin("admin", QueryOrigin::Agent("bot".into()))
+        .await
+        .unwrap();
+    let rows = admin_agent
+        .query_rows(&format!("SELECT * FROM {table}"))
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+}

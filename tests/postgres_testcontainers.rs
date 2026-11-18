@@ -613,6 +613,7 @@ async fn test_postgres_rls_predicate_is_applied() {
     roles.insert(
         "admin".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "*".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -622,6 +623,7 @@ async fn test_postgres_rls_predicate_is_applied() {
     roles.insert(
         "reader".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "pg_rls_orders".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -702,6 +704,7 @@ async fn test_postgres_rls_predicate_on_non_text_column() {
     roles.insert(
         "admin".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "*".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -711,6 +714,7 @@ async fn test_postgres_rls_predicate_on_non_text_column() {
     roles.insert(
         "reader".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "pg_rls_int_orders".to_string(),
                 operations: vec![PermissionAction::Select],

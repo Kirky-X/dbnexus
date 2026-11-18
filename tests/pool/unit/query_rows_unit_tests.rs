@@ -171,6 +171,7 @@ async fn test_query_rows_masking_and_rls() {
     roles.insert(
         "admin".to_string(),
         dbnexus::access::permission::RolePolicy {
+            origin_constraints: vec![],
             tables: vec![dbnexus::access::permission::TablePermission {
                 name: "*".to_string(),
                 operations: vec![
@@ -185,6 +186,7 @@ async fn test_query_rows_masking_and_rls() {
     roles.insert(
         "default".to_string(),
         dbnexus::access::permission::RolePolicy {
+            origin_constraints: vec![],
             tables: vec![dbnexus::access::permission::TablePermission {
                 name: "orders".to_string(),
                 operations: vec![dbnexus::access::permission::PermissionAction::Select],
@@ -512,6 +514,7 @@ async fn test_query_rows_rls_predicate_survives_order_by_and_limit() {
     roles.insert(
         "admin".to_string(),
         dbnexus::access::permission::RolePolicy {
+            origin_constraints: vec![],
             tables: vec![dbnexus::access::permission::TablePermission {
                 name: "*".to_string(),
                 operations: vec![dbnexus::access::permission::PermissionAction::Select],
@@ -521,6 +524,7 @@ async fn test_query_rows_rls_predicate_survives_order_by_and_limit() {
     roles.insert(
         "default".to_string(),
         dbnexus::access::permission::RolePolicy {
+            origin_constraints: vec![],
             tables: vec![dbnexus::access::permission::TablePermission {
                 name: "orders".to_string(),
                 operations: vec![dbnexus::access::permission::PermissionAction::Select],
@@ -612,6 +616,7 @@ async fn test_raw_write_path_is_row_level_scoped() {
     roles.insert(
         "admin".to_string(),
         dbnexus::access::permission::RolePolicy {
+            origin_constraints: vec![],
             tables: vec![dbnexus::access::permission::TablePermission {
                 name: "*".to_string(),
                 operations: vec![dbnexus::access::permission::PermissionAction::Select],
@@ -621,6 +626,7 @@ async fn test_raw_write_path_is_row_level_scoped() {
     roles.insert(
         "default".to_string(),
         dbnexus::access::permission::RolePolicy {
+            origin_constraints: vec![],
             tables: vec![dbnexus::access::permission::TablePermission {
                 name: "orders".to_string(),
                 operations: vec![
@@ -809,6 +815,7 @@ async fn test_rls_join_degradation_applies_primary_only() {
         roles.insert(
             role.to_string(),
             dbnexus::access::permission::RolePolicy {
+                origin_constraints: vec![],
                 tables: ["orders", "users"]
                     .iter()
                     .map(|t| dbnexus::access::permission::TablePermission {

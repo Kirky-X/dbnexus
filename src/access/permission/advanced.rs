@@ -57,6 +57,7 @@ impl AdvancedRbacProvider {
         roles.insert(
             "admin".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".to_string(),
                     operations: vec![
@@ -73,6 +74,7 @@ impl AdvancedRbacProvider {
         roles.insert(
             "readonly".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".to_string(),
                     operations: vec![PermissionAction::Select],
@@ -83,6 +85,7 @@ impl AdvancedRbacProvider {
         roles.insert(
             "readwrite".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".to_string(),
                     operations: vec![
@@ -488,6 +491,7 @@ mod tests {
         provider.add_role(
             "role_a".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "test".to_string(),
                     operations: vec![PermissionAction::Select],
@@ -570,6 +574,7 @@ mod tests {
         provider.add_role(
             "custom_role".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "custom_table".to_string(),
                     operations: vec![PermissionAction::Select, PermissionAction::Update],
@@ -607,6 +612,7 @@ mod tests {
         provider.add_role(
             "custom_role".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "custom_table".to_string(),
                     operations: vec![PermissionAction::Select],
@@ -714,6 +720,7 @@ mod tests {
             provider.add_role(
                 format!("level_{}", i),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: format!("table_{}", i),
                         operations: vec![PermissionAction::Select],
@@ -748,6 +755,7 @@ mod tests {
             provider.add_role(
                 format!("deep_{}", i),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: format!("table_{}", i),
                         operations: vec![PermissionAction::Select],
@@ -793,6 +801,7 @@ mod tests {
         provider.add_role(
             "a".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "test_table".to_string(),
                     operations: vec![PermissionAction::Select],

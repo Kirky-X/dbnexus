@@ -21,6 +21,7 @@ use std::time::Duration;
 /// 构造一个包含单表权限的 `RolePolicy`
 fn sample_policy(table: &str, action: PermissionAction) -> RolePolicy {
     RolePolicy {
+        origin_constraints: vec![],
         tables: vec![TablePermission {
             name: table.to_string(),
             operations: vec![action],

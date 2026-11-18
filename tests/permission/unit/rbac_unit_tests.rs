@@ -31,6 +31,7 @@ fn test_rbac_provider_add_role() {
     let provider = RbacProvider::new();
 
     let admin_policy = RolePolicy {
+        origin_constraints: vec![],
         tables: vec![TablePermission {
             name: "*".to_string(),
             operations: vec![
@@ -59,6 +60,7 @@ fn test_rbac_provider_add_multiple_roles() {
     provider.add_role(
         "admin".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "*".to_string(),
                 operations: vec![
@@ -74,6 +76,7 @@ fn test_rbac_provider_add_multiple_roles() {
     provider.add_role(
         "readonly".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "*".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -84,6 +87,7 @@ fn test_rbac_provider_add_multiple_roles() {
     provider.add_role(
         "user".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "users".to_string(),
                 operations: vec![PermissionAction::Select, PermissionAction::Insert],
@@ -106,6 +110,7 @@ fn test_rbac_provider_override_role() {
     provider.add_role(
         "test_role".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "table1".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -117,6 +122,7 @@ fn test_rbac_provider_override_role() {
     provider.add_role(
         "test_role".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "table2".to_string(),
                 operations: vec![PermissionAction::Insert],
@@ -167,6 +173,7 @@ fn test_rbac_check_access_allowed() {
     provider.add_role(
         "user".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "users".to_string(),
                 operations: vec![PermissionAction::Select, PermissionAction::Insert],
@@ -197,6 +204,7 @@ fn test_rbac_check_access_denied() {
     provider.add_role(
         "user".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "users".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -241,6 +249,7 @@ fn test_rbac_check_access_nonexistent_table() {
     provider.add_role(
         "user".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "users".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -264,6 +273,7 @@ fn test_rbac_wildcard_table_matching() {
     provider.add_role(
         "admin".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "*".to_string(),
                 operations: vec![
@@ -312,6 +322,7 @@ fn test_rbac_mixed_wildcard_and_exact() {
     provider.add_role(
         "mixed_role".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![
                 TablePermission {
                     name: "users".to_string(),
@@ -360,6 +371,7 @@ fn test_rbac_empty_operations() {
     provider.add_role(
         "empty_ops".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "users".to_string(),
                 operations: vec![],
@@ -385,7 +397,13 @@ fn test_rbac_empty_operations() {
 fn test_rbac_empty_tables() {
     let provider = RbacProvider::new();
 
-    provider.add_role("empty_tables".to_string(), RolePolicy { tables: vec![] });
+    provider.add_role(
+        "empty_tables".to_string(),
+        RolePolicy {
+            tables: vec![],
+            origin_constraints: vec![],
+        },
+    );
 
     // 空表列表意味着没有任何权限
     assert!(
@@ -403,6 +421,7 @@ fn test_rbac_multiple_table_permissions() {
     provider.add_role(
         "multi_table".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![
                 TablePermission {
                     name: "users".to_string(),
@@ -474,6 +493,7 @@ fn test_rbac_role_name_case_sensitive() {
     provider.add_role(
         "Admin".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "users".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -504,6 +524,7 @@ fn test_rbac_table_name_case_sensitive() {
     provider.add_role(
         "user".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "Users".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -532,6 +553,7 @@ fn test_rbac_special_character_table_names() {
     provider.add_role(
         "special".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![
                 TablePermission {
                     name: "user_data".to_string(),
@@ -575,6 +597,7 @@ fn test_rbac_has_role() {
     provider.add_role(
         "test_role".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "users".to_string(),
                 operations: vec![PermissionAction::Select],
@@ -597,6 +620,7 @@ fn test_rbac_concurrent_access() {
     provider.add_role(
         "admin".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "*".to_string(),
                 operations: vec![

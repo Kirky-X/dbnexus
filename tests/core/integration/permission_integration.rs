@@ -125,6 +125,7 @@ fn test_operation_display() {
 #[test]
 fn test_role_policy_allows() {
     let policy = RolePolicy {
+        origin_constraints: vec![],
         tables: vec![TablePermission {
             name: "users".to_string(),
             operations: vec![Operation::Select, Operation::Insert],
@@ -143,6 +144,7 @@ fn test_permission_config_check_access() {
         roles: [(
             "admin".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".to_string(),
                     operations: vec![
@@ -227,6 +229,7 @@ async fn test_permission_check_with_auto_load() {
         roles: [(
             "test_role".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "users".to_string(),
                     operations: vec![Operation::Select],

@@ -356,6 +356,7 @@ mod tests {
         p.add_role(
             "admin",
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".into(),
                     operations: vec![PermissionAction::Select, PermissionAction::Insert],
@@ -373,6 +374,7 @@ mod tests {
         p.add_role(
             "reader",
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "docs".into(),
                     operations: vec![PermissionAction::Select],
@@ -419,6 +421,7 @@ mod tests {
         config.roles.insert(
             "admin".into(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "*".into(),
                     operations: vec![PermissionAction::Select],
@@ -436,6 +439,7 @@ mod tests {
         config.roles.insert(
             "viewer".into(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "reports".into(),
                     operations: vec![PermissionAction::Select],

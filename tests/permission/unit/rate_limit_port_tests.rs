@@ -20,6 +20,7 @@ fn policy_allowing_select() -> PermissionConfig {
         roles: [(
             "test_role".to_string(),
             RolePolicy {
+                origin_constraints: vec![],
                 tables: vec![TablePermission {
                     name: "users".to_string(),
                     operations: vec![PermissionAction::Select],

@@ -368,6 +368,14 @@ impl PermissionContext {
         &self.check_stats
     }
 
+    /// 当前角色的已加载策略（供查询来源形状约束读取；不写 check_stats）
+    pub async fn effective_policy(&self) -> Option<RolePolicy> {
+        if let Some(policy) = self.policy_cache.get(&self.role).await.ok().flatten() {
+            return Some(policy);
+        }
+        self.get_or_load_policy_coalesced().await
+    }
+
     /// 角色策略是否已加载/存在（RoleNotDefined 与 TableNotInPolicy 的判据）
     ///
     /// 缓存命中即真；miss 时经既有 `get_or_load_policy_coalesced` 合并加载后判存在性。
@@ -944,6 +952,7 @@ mod tests {
             roles: [(
                 "test_role".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "users".to_string(),
                         operations: vec![PermissionAction::Select],
@@ -975,6 +984,7 @@ mod tests {
             roles: [(
                 "defined_role".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "users".to_string(),
                         operations: vec![PermissionAction::Select],
@@ -1000,6 +1010,7 @@ mod tests {
             roles: [(
                 "test_role".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "users".to_string(),
                         operations: vec![PermissionAction::Select],
@@ -1038,6 +1049,7 @@ mod tests {
             roles: [(
                 "test_role".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "users".to_string(),
                         operations: vec![PermissionAction::Select, PermissionAction::Insert],
@@ -1121,6 +1133,7 @@ mod tests {
             roles: [(
                 "admin".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "*".to_string(),
                         operations: vec![
@@ -1174,6 +1187,7 @@ mod tests {
             roles: [(
                 "editor".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "articles".to_string(),
                         operations: vec![
@@ -1226,6 +1240,7 @@ mod tests {
             roles: [(
                 "viewer".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "reports".to_string(),
                         operations: vec![PermissionAction::Select],
@@ -1367,6 +1382,7 @@ mod tests {
             roles: [(
                 "reports_role".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "reports".to_string(),
                         operations: vec![PermissionAction::Select],
@@ -1436,6 +1452,7 @@ mod tests {
             roles: [(
                 "admin".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "*".to_string(),
                         operations: vec![
@@ -1492,6 +1509,7 @@ mod tests {
             roles: [(
                 "test_role".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "users".to_string(),
                         operations: vec![PermissionAction::Select],
@@ -1562,9 +1580,15 @@ mod tests {
     #[tokio::test]
     async fn test_context_load_policy_missing_role_errors() {
         let config = PermissionConfig {
-            roles: [("other_role".to_string(), RolePolicy { tables: vec![] })]
-                .into_iter()
-                .collect(),
+            roles: [(
+                "other_role".to_string(),
+                RolePolicy {
+                    tables: vec![],
+                    origin_constraints: vec![],
+                },
+            )]
+            .into_iter()
+            .collect(),
         };
         let ctx = PermissionContext::with_cache_size("me".to_string(), 64)
             .await
@@ -1579,6 +1603,7 @@ mod tests {
             roles: [(
                 "batch_role".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "users".to_string(),
                         operations: vec![PermissionAction::Select, PermissionAction::Insert],
@@ -1611,6 +1636,7 @@ mod tests {
             roles: [(
                 "known".to_string(),
                 RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![TablePermission {
                         name: "users".to_string(),
                         operations: vec![PermissionAction::Select],

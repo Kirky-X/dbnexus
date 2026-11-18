@@ -1258,6 +1258,34 @@ By default `RlsPolicy` rejects multi-table statements (JOIN/subquery), fail-clos
 
 In `production`, a missing Required check yields `NonCompliant` (exit code 1), a missing Recommended check yields `Degraded` (exit 0), otherwise `Compliant` (exit 0). Invalid usage exits 2. The library function `dbnexus::security_posture(PostureProfile)` returns the same report.
 
+## Query Origin Governance
+
+`QueryOrigin` adds a second governance dimension alongside roles. Declare the source when issuing a session:
+
+```rust
+use dbnexus::{QueryOrigin, DbPool};
+
+let session = pool
+    .get_session_with_origin("reporting", QueryOrigin::Agent("claude-code".into()))
+    .await?;
+```
+
+`Session::query_rows` then applies the matching `origin_constraints` from the role policy:
+
+```yaml
+roles:
+  reporting:
+    tables: [...]
+    origin_constraints:
+      - origin_match: agent        # human | service | agent | any
+        max_rows: 500             # reject when exceeded; never silently truncate
+        deny_columns: [ssn, email] # removed from result rows
+```
+
+Merge rules: `agent` rules take precedence over `any` for Agent sources; matched rules take the smallest `max_rows` and the union of `deny_columns`. Admin sessions and sources without matching constraints are unchanged.
+
+Boundary: the origin is declared by the caller at session issuance — it is a library contract, not an in-process enforced identity. MCP tools are the first enforcement point. Row limits reject the entire query; denied columns are removed after retrieval (the data still passes through the driver).
+
 ## MCP Tool Surface (`mcp` feature)
 
 `dbnexus-cli mcp-serve` runs a stdio MCP server. Its tools are constrained by the permission engine — no raw SQL tool is exposed:

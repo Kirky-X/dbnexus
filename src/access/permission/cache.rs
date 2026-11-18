@@ -336,6 +336,7 @@ mod tests {
 
     fn sample_policy(table: &str) -> RolePolicy {
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: table.to_string(),
                 operations: vec![PermissionAction::Select],

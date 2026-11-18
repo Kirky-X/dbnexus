@@ -26,7 +26,11 @@ mod types;
 // 从 types.rs 重导出
 #[cfg(any(feature = "ladybug", feature = "neo4j"))]
 pub use types::GraphPermissionContext;
-pub use types::{PermissionAction, PermissionConfig, PermissionError, RolePolicy, TablePermission};
+pub use types::resolve_origin_constraints;
+pub use types::{
+    OriginConstraint, OriginMatch, PermissionAction, PermissionConfig, PermissionError,
+    QueryOrigin, ResolvedOriginLimits, RolePolicy, TablePermission,
+};
 
 // 从 provider.rs 重导出
 pub use provider::{
@@ -92,6 +96,7 @@ mod tests {
     #[test]
     fn test_role_policy_public_api() {
         let policy = RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "*".to_string(),
                 operations: vec![PermissionAction::Select],

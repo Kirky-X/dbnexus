@@ -48,12 +48,12 @@ pub use permission::GraphPermissionContext;
 // TTL + SWR 权限缓存（公开 API 契约见 cache.rs 模块 doc 迁移说明）
 #[cfg(feature = "permission")]
 pub use permission::{
-    AdvancedRbacProvider, CacheStats, Limiter, MemoryPermissionProvider, PermissionAction,
-    PermissionCache, PermissionCacheConfig, PermissionCheckStats, PermissionCheckStatsSnapshot,
-    PermissionConfig, PermissionContext, PermissionError, PermissionProvider,
-    PermissionProviderError, RateLimitBackend, RateLimitDecision, RateLimitError, RateLimiter,
-    RbacProvider, RefreshablePermissionProvider, RolePolicy, TableAccessDecision, TablePermission,
-    YamlPermissionProvider,
+    AdvancedRbacProvider, CacheStats, Limiter, MemoryPermissionProvider, OriginConstraint,
+    OriginMatch, PermissionAction, PermissionCache, PermissionCacheConfig, PermissionCheckStats,
+    PermissionCheckStatsSnapshot, PermissionConfig, PermissionContext, PermissionError,
+    PermissionProvider, PermissionProviderError, QueryOrigin, RateLimitBackend, RateLimitDecision,
+    RateLimitError, RateLimiter, RbacProvider, RefreshablePermissionProvider, RolePolicy,
+    TableAccessDecision, TablePermission, YamlPermissionProvider,
 };
 
 // Re-exports: authentication

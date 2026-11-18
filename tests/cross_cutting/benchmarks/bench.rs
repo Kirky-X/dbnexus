@@ -65,6 +65,7 @@ fn permission_config_load_benchmark(c: &mut Criterion) {
 /// 基准测试：RolePolicy allows 检查
 fn role_policy_check_benchmark(c: &mut Criterion) {
     let policy = RolePolicy {
+        origin_constraints: vec![],
         tables: vec![
             TablePermission {
                 name: "users".to_string(),

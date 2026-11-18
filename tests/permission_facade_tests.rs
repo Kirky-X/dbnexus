@@ -24,6 +24,7 @@ fn rbac_roles(default_tables: Vec<TablePermission>) -> HashMap<String, RolePolic
     roles.insert(
         "admin".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: vec![TablePermission {
                 name: "*".to_string(),
                 operations: vec![
@@ -38,6 +39,7 @@ fn rbac_roles(default_tables: Vec<TablePermission>) -> HashMap<String, RolePolic
     roles.insert(
         "default".to_string(),
         RolePolicy {
+            origin_constraints: vec![],
             tables: default_tables,
         },
     );

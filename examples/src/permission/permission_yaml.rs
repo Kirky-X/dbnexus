@@ -108,6 +108,7 @@ roles:
             (
                 "admin".to_string(),
                 dbnexus::access::RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![dbnexus::access::TablePermission {
                         name: "*".to_string(),
                         operations: vec![
@@ -122,6 +123,7 @@ roles:
             (
                 "guest".to_string(),
                 dbnexus::access::RolePolicy {
+                    origin_constraints: vec![],
                     tables: vec![dbnexus::access::TablePermission {
                         name: "users".to_string(),
                         operations: vec![PermissionAction::Select],
