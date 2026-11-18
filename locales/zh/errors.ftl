@@ -375,3 +375,4 @@ posture-effect-unified-facade = 未编译 RBAC+脱敏+RLS 统一门面
 posture-effect-audit = 未编译审计日志（AuditLogger/DbAuditStorage）
 posture-effect-jwt-auth = 未编译 JWT 双令牌认证与 bcrypt
 posture-effect-drivers = 未编译任何关系型数据库驱动 feature
+session-log-rls-degraded = 表 { $table } 的 RLS 已降级；受控表: { $tables }

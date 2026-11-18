@@ -379,3 +379,4 @@ posture-effect-unified-facade = The unified RBAC+masking+RLS facade is not compi
 posture-effect-audit = Audit logging (AuditLogger/DbAuditStorage) is not compiled in
 posture-effect-jwt-auth = JWT dual-token authentication and bcrypt are not compiled in
 posture-effect-drivers = No relational database driver feature is compiled in
+session-log-rls-degraded = RLS degraded for table { $table }; controlled tables: { $tables }

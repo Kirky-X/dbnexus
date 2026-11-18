@@ -245,47 +245,62 @@ impl Session {
             .map_err(|_| DbError::PermissionDenied {
                 reason: crate::foundation::DenialReason::RlsParseFailed,
             })?;
-        if parsed.all_table_names.len() > 1 {
-            return Err(crate::foundation::DenialReason::RlsMultiTableUnsupported {
-                tables: parsed
-                    .all_table_names
-                    .iter()
-                    .map(|t| sanitize_log_field(t))
-                    .collect(),
-            }
-            .into());
-        }
-        // 局部引入：SqlOperationType 在 permission 组合下由上层导入，
-        // 此处需在 data-protection 单独启用时也可用
         use crate::access::sql_parser::SqlOperationType;
-        if !matches!(
+        let in_scope = matches!(
             parsed.operation_type,
             SqlOperationType::Select | SqlOperationType::Update | SqlOperationType::Delete
-        ) {
-            return Ok(sql.to_string());
-        }
-        rls.inject(
-            sql,
-            parsed.all_table_names.first().map(String::as_str),
-            sql_dialect(backend),
-        )
-        .map_err(|e| {
-            // 细节只进服务端日志，对外不回显策略细节
-            log::warn!(
-                "{}",
-                i18n::t("session-log-rls-rejected", &[("error", e.to_string())])
-            );
-            crate::foundation::DenialReason::RlsPredicateRejected {
-                table: sanitize_log_field(
-                    parsed
-                        .all_table_names
-                        .first()
-                        .map(String::as_str)
-                        .unwrap_or(""),
-                ),
+        );
+        let decision = rls.decide(&parsed.all_table_names, in_scope, sql, sql_dialect(backend));
+        self.apply_rls_decision(decision, sql, backend).await
+    }
+
+    /// 消费 RLS 裁定：放行/拒绝/降级注入（两出口共用，降级发审计）
+    #[cfg(all(feature = "sql-parser", feature = "data-protection"))]
+    async fn apply_rls_decision(
+        &self,
+        decision: crate::access::data_protection::RlsDecision,
+        original_sql: &str,
+        _backend: sea_orm::DbBackend,
+    ) -> DbResult<String> {
+        use crate::access::data_protection::RlsDecision;
+        match decision {
+            RlsDecision::Passthrough | RlsDecision::OutOfScope => Ok(original_sql.to_string()),
+            RlsDecision::Inject { sql } => Ok(sql),
+            RlsDecision::InjectDegraded {
+                sql,
+                primary_table,
+                controlled_tables,
+            } => {
+                self.audit_rls_degraded(&primary_table, &controlled_tables);
+                Ok(sql)
             }
-            .into()
-        })
+            RlsDecision::Reject { reason } => {
+                log::warn!(
+                    "{}",
+                    i18n::t(
+                        "session-log-rls-rejected",
+                        &[("error", format!("{reason:?}"))]
+                    )
+                );
+                Err(rls_rejection_to_error(reason))
+            }
+        }
+    }
+
+    /// 记录 RLS 降级审计：审计环 + log::warn（无 audit feature 时仍有可观测日志）
+    #[cfg(all(feature = "sql-parser", feature = "data-protection"))]
+    fn audit_rls_degraded(&self, primary_table: &str, controlled_tables: &[String]) {
+        super::super::audit::audit_rls_degraded(&self.role, primary_table, controlled_tables);
+        log::warn!(
+            "{}",
+            i18n::t(
+                "session-log-rls-degraded",
+                &[
+                    ("table", sanitize_log_field(primary_table)),
+                    ("tables", sanitize_log_field(&controlled_tables.join(","))),
+                ]
+            )
+        );
     }
 
     /// 当前读：在活动事务中执行行锁定查询（`SELECT ... FOR UPDATE`）
@@ -598,25 +613,11 @@ impl Session {
             match dp.rls.as_ref() {
                 Some(rls) if !self.is_admin && !rls.is_empty() => {
                     // 解析失败 → 无法判定受影响表 → 拒绝而非放行
-                    // （不注入谓词即等于无行级隔离）
                     let Some(tables) = parsed_tables.as_ref() else {
-                        return Err(DbError::Permission(i18n::t_simple(
-                            "session-rls-parse-failed",
-                        )));
+                        return Err(crate::foundation::DenialReason::RlsParseFailed.into());
                     };
-                    // 多表语句无法用单表谓词表达行级隔离 → 拒绝而非放行
-                    if tables.len() > 1 {
-                        return Err(DbError::Permission(rls_multi_table_error(tables)));
-                    }
-                    rls.inject(sql, primary_table.as_deref(), sql_dialect(backend))
-                        .map_err(|e| {
-                            // 细节只进服务端日志，对外不回显策略细节
-                            log::warn!(
-                                "{}",
-                                i18n::t("session-log-rls-rejected", &[("error", e.to_string())])
-                            );
-                            DbError::Permission(i18n::t_simple("session-rls-not-applicable"))
-                        })?
+                    let decision = rls.decide(tables, true, sql, sql_dialect(backend));
+                    self.apply_rls_decision(decision, sql, backend).await?
                 }
                 _ => sql.to_string(),
             }
@@ -1066,5 +1067,31 @@ fn rls_multi_table_error(tables: &[String]) -> String {
         i18n::t_simple("session-rls-multi-table-unsafe")
     } else {
         i18n::t_simple("session-rls-single-table-required")
+    }
+}
+
+/// RLS 裁定拒绝 → DbError（映射既有结构化 reason code 与多表文案）
+#[cfg(all(feature = "data-protection", feature = "sql-parser"))]
+fn rls_rejection_to_error(
+    reason: crate::access::data_protection::RlsRejection,
+) -> crate::foundation::DbError {
+    use crate::access::data_protection::RlsRejection;
+    use crate::foundation::DenialReason;
+    match reason {
+        RlsRejection::ParseFailed => DenialReason::RlsParseFailed.into(),
+        RlsRejection::MultiTableUnsupported { tables } => {
+            let _ = rls_multi_table_error(&tables);
+            DenialReason::RlsMultiTableUnsupported {
+                tables: tables.iter().map(|t| sanitize_log_field(t)).collect(),
+            }
+            .into()
+        }
+        RlsRejection::SetOperationUnsupported => {
+            DenialReason::RlsMultiTableUnsupported { tables: vec![] }.into()
+        }
+        RlsRejection::UnsafePolicyColumn { table, .. } => DenialReason::RlsPredicateRejected {
+            table: sanitize_log_field(&table),
+        }
+        .into(),
     }
 }

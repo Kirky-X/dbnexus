@@ -77,10 +77,26 @@ impl PermissionFacadeConfig {
     }
 
     /// 追加一条 RLS 租户谓词（table 上注入 `column = 'value'`）
+    ///
+    /// 多表行为缺省 Reject（fail-closed）。
     #[cfg(feature = "data-protection")]
     pub fn with_rls_policy(mut self, table: &str, column: &str, value: &str) -> Self {
         let engine = self.rls.take().unwrap_or_default();
         self.rls = Some(engine.policy(table, column, value));
+        self
+    }
+
+    /// 追加一条 RLS 租户谓词并声明多表行为（降级需显式声明）
+    #[cfg(feature = "data-protection")]
+    pub fn with_rls_policy_join_policy(
+        mut self,
+        table: &str,
+        column: &str,
+        value: &str,
+        on_join_failure: crate::access::data_protection::JoinFailurePolicy,
+    ) -> Self {
+        let engine = self.rls.take().unwrap_or_default();
+        self.rls = Some(engine.policy_with_join_failure(table, column, value, on_join_failure));
         self
     }
 }

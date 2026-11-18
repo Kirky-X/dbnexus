@@ -31,6 +31,49 @@ pub(crate) const BYPASS_KIND_ADMIN: &str = "admin_bypass";
 /// 审计事件类别：使用了默认 admin 角色（vuln-0001）
 pub(crate) const BYPASS_KIND_DEFAULT_ADMIN_ROLE: &str = "default_admin_role";
 
+/// 审计事件类别：RLS 多表语句按策略降级（主表注入，其余表由 RBAC 兜底）
+pub(crate) const BYPASS_KIND_RLS_DEGRADED: &str = "rls_degraded";
+
+/// 记录一条 RLS 降级审计事件到进程级审计环
+///
+/// `controlled_tables` 为其余受 RLS 管控的表名（已脱敏），`operation` 为固定标记
+/// `"rls_degraded"`；detail 不含 SQL 文本。
+pub(super) fn audit_rls_degraded(role: &str, primary_table: &str, controlled_tables: &[String]) {
+    let detail = if controlled_tables.is_empty() {
+        "none".to_string()
+    } else {
+        sanitize_table_list(controlled_tables)
+    };
+    record_admin_bypass(
+        BYPASS_KIND_RLS_DEGRADED,
+        role,
+        primary_table,
+        &format!("rls_degraded:{detail}"),
+    );
+}
+
+/// 受控表清单脱敏拼接到 detail（剔除控制字符/不可见格式字符）
+fn sanitize_table_list(tables: &[String]) -> String {
+    tables
+        .iter()
+        .map(|t| {
+            t.chars()
+                .filter(|c| {
+                    !c.is_control()
+                        && !matches!(
+                            c,
+                            '\u{200B}'..='\u{200F}'
+                                | '\u{202A}'..='\u{202E}'
+                                | '\u{2066}'..='\u{2069}'
+                                | '\u{FEFF}'
+                        )
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 /// 进程级轻量安全审计事件
 ///
 /// 供外部观测 admin bypass 审计环（见 [`take_admin_bypass_events`]）。
