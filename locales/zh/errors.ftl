@@ -380,3 +380,7 @@ session-log-rls-degraded = 表 { $table } 的 RLS 已降级；受控表: { $tabl
 # --- 查询来源治理 ---
 origin-rows-exceeded = 查询返回行数超过 { $max_rows } 行；请求已拒绝
 origin-column-denied = 查询来源策略已移除被拒绝的列
+
+# --- 策略干跑 ---
+dry-run-missing-grant = 在候选策略中为角色 { $role } 添加 { $table }:{ $action } 授权
+dry-run-role-not-defined = 候选策略中未定义角色 { $role }

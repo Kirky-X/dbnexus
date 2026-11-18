@@ -217,6 +217,8 @@ pub use crate::access::{
 };
 
 // 实体事件总线 + Outbox（entity-events feature）
+#[cfg(feature = "permission")]
+pub use crate::access::{DryRunReport, OutcomeKind, QueryOutcome, dry_run_policies};
 pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 pub use crate::access::{OriginConstraint, OriginMatch, QueryOrigin};
 #[cfg(feature = "entity-events")]

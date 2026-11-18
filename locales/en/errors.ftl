@@ -384,3 +384,7 @@ session-log-rls-degraded = RLS degraded for table { $table }; controlled tables:
 # --- Query origin governance ---
 origin-rows-exceeded = Query returned more than { $max_rows } rows; request rejected
 origin-column-denied = Query origin policy removed a denied column
+
+# --- Policy dry-run ---
+dry-run-missing-grant = add { $table }:{ $action } to role { $role } in candidate policy
+dry-run-role-not-defined = role { $role } is not defined in candidate policy

@@ -30,8 +30,15 @@ pub mod permission_audit_chain;
 #[cfg(all(feature = "permission", feature = "data-protection"))]
 pub mod permission_facade;
 
+#[cfg(feature = "permission")]
+pub mod policy_dry_run;
+
 // Re-exports: security
 pub use injection_engine::{InjectionEngine, InjectionRule, RuleCategory};
+#[cfg(feature = "permission")]
+pub use policy_dry_run::{
+    DryRunReport, DryRunSummary, OutcomeKind, QueryOutcome, dry_run_policies,
+};
 #[cfg(feature = "sql-parser")]
 pub use security::{
     AuditingDdlGuard, DdlAuditRecord, DdlGuard, DdlGuardPolicy, DdlValidationResult, DryRunDdlGuard,
