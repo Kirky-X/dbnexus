@@ -1047,7 +1047,7 @@ async fn parse_sql_for_permission(sql: &str) -> DbResult<Option<(String, Permiss
 ///
 /// 消费点全部位于 sql-parser 门控函数（rls_inject_raw / query_rows_execute）内
 #[cfg(all(feature = "data-protection", feature = "sql-parser"))]
-fn sql_dialect(backend: sea_orm::DbBackend) -> crate::database::sql_text::SqlBackend {
+pub(crate) fn sql_dialect(backend: sea_orm::DbBackend) -> crate::database::sql_text::SqlBackend {
     match backend {
         sea_orm::DbBackend::MySql => crate::database::sql_text::SqlBackend::MySql,
         _ => crate::database::sql_text::SqlBackend::Standard,

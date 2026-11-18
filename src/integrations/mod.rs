@@ -21,6 +21,10 @@ pub mod kit;
 #[cfg(feature = "http-health")]
 pub mod http_health;
 
+/// MCP Server 适配器（rmcp stdio；工具受权限引擎约束）
+#[cfg(feature = "mcp")]
+pub mod mcp_server;
+
 // Re-exports
 #[cfg(feature = "oxcache-integration")]
 pub use oxcache_adapter::OxcacheDbCacheAdapter;

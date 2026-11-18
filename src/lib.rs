@@ -103,7 +103,8 @@ pub mod i18n;
 #[cfg(any(
     feature = "oxcache-integration",
     feature = "kit",
-    feature = "http-health"
+    feature = "http-health",
+    feature = "mcp"
 ))]
 pub mod integrations;
 
@@ -149,6 +150,8 @@ pub use crate::domain::{
 pub use crate::database::DbConnection;
 pub use crate::database::DbPool;
 pub use crate::database::DbPoolBuilder;
+#[cfg(all(feature = "permission", feature = "sql-parser"))]
+pub use crate::database::pool::AccessExplanation;
 #[cfg(feature = "migration")]
 pub use crate::database::{
     Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFile, MigrationFileParser,

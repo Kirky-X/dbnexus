@@ -53,6 +53,8 @@ use tokio::sync::RwLock;
 // 大文件拆分：按职责纯移动的子模块（行为不变）
 mod duckdb;
 mod execute;
+#[cfg(all(feature = "permission", feature = "sql-parser"))]
+pub mod explain;
 mod graph;
 mod metrics;
 #[cfg(test)]

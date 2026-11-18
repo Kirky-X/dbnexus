@@ -32,12 +32,14 @@ pub(crate) const BYPASS_KIND_ADMIN: &str = "admin_bypass";
 pub(crate) const BYPASS_KIND_DEFAULT_ADMIN_ROLE: &str = "default_admin_role";
 
 /// 审计事件类别：RLS 多表语句按策略降级（主表注入，其余表由 RBAC 兜底）
+#[cfg(feature = "data-protection")]
 pub(crate) const BYPASS_KIND_RLS_DEGRADED: &str = "rls_degraded";
 
 /// 记录一条 RLS 降级审计事件到进程级审计环
 ///
 /// `controlled_tables` 为其余受 RLS 管控的表名（已脱敏），`operation` 为固定标记
 /// `"rls_degraded"`；detail 不含 SQL 文本。
+#[cfg(feature = "data-protection")]
 pub(super) fn audit_rls_degraded(role: &str, primary_table: &str, controlled_tables: &[String]) {
     let detail = if controlled_tables.is_empty() {
         "none".to_string()
@@ -53,6 +55,7 @@ pub(super) fn audit_rls_degraded(role: &str, primary_table: &str, controlled_tab
 }
 
 /// 受控表清单脱敏拼接到 detail（剔除控制字符/不可见格式字符）
+#[cfg(feature = "data-protection")]
 fn sanitize_table_list(tables: &[String]) -> String {
     tables
         .iter()

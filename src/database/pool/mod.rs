@@ -27,6 +27,8 @@ pub mod duckdb_conn;
 use crate::foundation::DbConfig;
 
 pub use db_pool::{DatabaseConnection, DbConnection, DbPool, PoolStatus};
+#[cfg(all(feature = "permission", feature = "sql-parser"))]
+pub use session::explain::AccessExplanation;
 pub use session::{DbIsolationLevel, Session};
 
 #[cfg(feature = "duckdb")]
