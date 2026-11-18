@@ -136,6 +136,17 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 // 行级安全（RLS）
 
+/// 多表语句遇 RLS 管控表时的行为（默认 Reject = 现状 fail-closed）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+pub enum JoinFailurePolicy {
+    /// 多表语句直接拒绝（默认，与 0.6.x 行为一致）
+    #[default]
+    Reject,
+    /// 谓词仅注入主表（FROM 首表），其余表行可见性由表级 RBAC 逐表检查兜底
+    #[serde(rename = "apply_to_primary_table_only")]
+    ApplyToPrimaryTableOnly,
+}
+
 /// 行级安全策略：对指定表的语句注入 `<column> = <value>` 谓词
 ///
 /// 谓词列名必须通过标识符白名单；谓词值经后端口径转义后作为字面量写入
@@ -143,7 +154,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 /// text/uuid/int 等列类型通用；绑定参数会被声明为 TEXT，非文本列无匹配
 /// 操作符）。注入范围：读出口（`query_rows`）与 raw 写出口的
 /// SELECT/UPDATE/DELETE。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RlsPolicy {
     /// 目标表
     pub table: String,
@@ -151,6 +162,9 @@ pub struct RlsPolicy {
     pub column: String,
     /// 谓词值（如租户 ID）
     pub value: String,
+    /// 多表语句行为；缺省 Reject，旧配置文件反序列化结果不变
+    #[serde(default)]
+    pub on_join_failure: JoinFailurePolicy,
 }
 
 /// RLS 引擎：策略集 + 绕过控制
@@ -178,6 +192,24 @@ impl RlsEngine {
             table: table.into(),
             column: column.into(),
             value: value.into(),
+            on_join_failure: JoinFailurePolicy::Reject,
+        });
+        self
+    }
+
+    /// 追加策略并声明多表语句行为（降级需显式声明）
+    pub fn policy_with_join_failure(
+        mut self,
+        table: impl Into<String>,
+        column: impl Into<String>,
+        value: impl Into<String>,
+        on_join_failure: JoinFailurePolicy,
+    ) -> Self {
+        self.policies.push(RlsPolicy {
+            table: table.into(),
+            column: column.into(),
+            value: value.into(),
+            on_join_failure,
         });
         self
     }
@@ -267,6 +299,125 @@ impl std::fmt::Display for RlsError {
 }
 
 impl std::error::Error for RlsError {}
+
+/// RLS 对单条语句的裁定（集中判定，raw 与 query_rows 两出口共用）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RlsDecision {
+    /// 无策略/admin 透传：语句原样执行
+    Passthrough,
+    /// 操作类型不在 RLS 管控范围（SELECT/UPDATE/DELETE 之外）：透传
+    OutOfScope,
+    /// 单表语句：注入谓词
+    Inject {
+        /// 注入后的 SQL
+        sql: String,
+    },
+    /// 多表语句按策略降级：谓词仅注入主表，需发 rls_degraded 审计
+    InjectDegraded {
+        /// 注入后的 SQL
+        sql: String,
+        /// 主表（FROM 首表）
+        primary_table: String,
+        /// 其余表中命中 RLS 策略的表
+        controlled_tables: Vec<String>,
+    },
+    /// fail-closed 拒绝
+    Reject {
+        /// 拒绝原因
+        reason: RlsRejection,
+    },
+}
+
+/// RLS 拒绝原因（映射既有对外文案与结构化 reason code）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RlsRejection {
+    /// SQL 解析失败（调用方在 parse 失败时直接映射，不经 decide）
+    ParseFailed,
+    /// 多表语句在 Reject 策略下拒绝
+    MultiTableUnsupported {
+        /// 语句涉及的表名
+        tables: Vec<String>,
+    },
+    /// 顶层集合操作（恒拒绝，不受降级策略影响）
+    SetOperationUnsupported,
+    /// 谓词列未通过标识符白名单
+    UnsafePolicyColumn {
+        /// 策略目标表
+        table: String,
+        /// 非法列名
+        column: String,
+    },
+}
+
+impl RlsEngine {
+    /// 集中判定 RLS 走向
+    ///
+    /// `tables` 为解析器归一化后的语句涉及表清单；`in_scope` 表示操作类型属于
+    /// SELECT/UPDATE/DELETE（由调用方依 `SqlOperationType` 判定，避免本模块
+    /// 反向依赖 `sql-parser` feature）。`sql` / `backend` 供 `inject` 复用。
+    pub fn decide(
+        &self,
+        tables: &[String],
+        in_scope: bool,
+        sql: &str,
+        backend: SqlBackend,
+    ) -> RlsDecision {
+        if self.policies.is_empty() || tables.is_empty() {
+            return RlsDecision::Passthrough;
+        }
+        if !in_scope {
+            return RlsDecision::OutOfScope;
+        }
+        if tables.len() == 1 {
+            return match self.inject(sql, tables.first().map(String::as_str), backend) {
+                Ok(injected) => RlsDecision::Inject { sql: injected },
+                Err(e) => RlsDecision::Reject {
+                    reason: rejection_from_error(e),
+                },
+            };
+        }
+
+        let primary = &tables[0];
+        let Some(policy) = self.policies.iter().find(|p| p.table == *primary) else {
+            return RlsDecision::Passthrough;
+        };
+        if policy.on_join_failure == JoinFailurePolicy::Reject {
+            return RlsDecision::Reject {
+                reason: RlsRejection::MultiTableUnsupported {
+                    tables: tables.to_vec(),
+                },
+            };
+        }
+
+        match self.inject(sql, Some(primary), backend) {
+            Ok(injected) => {
+                let controlled = tables
+                    .iter()
+                    .skip(1)
+                    .filter(|t| self.policies.iter().any(|p| p.table == t.as_str()))
+                    .cloned()
+                    .collect();
+                RlsDecision::InjectDegraded {
+                    sql: injected,
+                    primary_table: primary.clone(),
+                    controlled_tables: controlled,
+                }
+            }
+            Err(e) => RlsDecision::Reject {
+                reason: rejection_from_error(e),
+            },
+        }
+    }
+}
+
+fn rejection_from_error(e: RlsError) -> RlsRejection {
+    match e {
+        RlsError::UnsafePolicyColumn { table, column } => {
+            RlsRejection::UnsafePolicyColumn { table, column }
+        }
+        RlsError::UnsupportedSetOperation => RlsRejection::SetOperationUnsupported,
+    }
+}
 
 /// 把谓词插入语句的 WHERE 位置
 ///
@@ -793,5 +944,123 @@ mod tests {
             )
             .unwrap_err();
         assert_eq!(err, RlsError::UnsupportedSetOperation);
+    }
+
+    /// JoinFailurePolicy 缺省 Reject（旧配置反序列化兼容）
+    #[test]
+    fn test_join_failure_policy_default_reject() {
+        let json = r#"{"table":"orders","column":"tenant_id","value":"t-100"}"#;
+        let policy: RlsPolicy = serde_json::from_str(json).unwrap();
+        assert_eq!(policy.on_join_failure, JoinFailurePolicy::Reject);
+        let json = r#"{"table":"orders","column":"tenant_id","value":"t-100","on_join_failure":"apply_to_primary_table_only"}"#;
+        let policy: RlsPolicy = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            policy.on_join_failure,
+            JoinFailurePolicy::ApplyToPrimaryTableOnly
+        );
+    }
+
+    /// decide 七种走向
+    #[test]
+    fn test_rls_decide_paths() {
+        use super::RlsDecision as D;
+
+        // 空策略透传
+        let empty = RlsEngine::new();
+        assert_eq!(
+            empty.decide(
+                &["orders".into()],
+                true,
+                "SELECT * FROM orders",
+                SqlBackend::Standard
+            ),
+            D::Passthrough
+        );
+
+        let reject = RlsEngine::new().policy("orders", "tenant_id", "t-100");
+        let degraded = RlsEngine::new().policy_with_join_failure(
+            "orders",
+            "tenant_id",
+            "t-100",
+            JoinFailurePolicy::ApplyToPrimaryTableOnly,
+        );
+
+        // 非管控操作透传
+        assert_eq!(
+            reject.decide(
+                &["orders".into()],
+                false,
+                "INSERT INTO orders VALUES (1)",
+                SqlBackend::Standard
+            ),
+            D::OutOfScope
+        );
+        // 单表注入
+        let sql = "SELECT * FROM orders";
+        match reject.decide(&["orders".into()], true, sql, SqlBackend::Standard) {
+            D::Inject { sql: injected } => assert!(injected.contains("tenant_id = 't-100'")),
+            other => panic!("expected Inject, got {other:?}"),
+        }
+        // 多表 Reject
+        let tables = vec!["orders".to_string(), "users".to_string()];
+        match reject.decide(
+            &tables,
+            true,
+            "SELECT * FROM orders JOIN users ON 1=1",
+            SqlBackend::Standard,
+        ) {
+            D::Reject {
+                reason: super::RlsRejection::MultiTableUnsupported { .. },
+            } => {}
+            other => panic!("expected Reject(MultiTableUnsupported), got {other:?}"),
+        }
+        // 多表降级
+        match degraded.decide(
+            &tables,
+            true,
+            "SELECT * FROM orders JOIN users ON 1=1",
+            SqlBackend::Standard,
+        ) {
+            D::InjectDegraded {
+                primary_table,
+                controlled_tables,
+                sql: injected,
+            } => {
+                assert_eq!(primary_table, "orders");
+                assert!(controlled_tables.is_empty());
+                assert!(injected.contains("tenant_id = 't-100'"));
+            }
+            other => panic!("expected InjectDegraded, got {other:?}"),
+        }
+        // 集合操作恒拒绝（即使降级策略）
+        match degraded.decide(
+            &["orders".into()],
+            true,
+            "SELECT * FROM orders UNION SELECT * FROM orders",
+            SqlBackend::Standard,
+        ) {
+            D::Reject {
+                reason: super::RlsRejection::SetOperationUnsupported,
+            } => {}
+            other => panic!("expected Reject(SetOperationUnsupported), got {other:?}"),
+        }
+        // 列白名单不过拒绝
+        let bad = RlsEngine::new().policy_with_join_failure(
+            "orders",
+            "tenant_id; DROP",
+            "t-100",
+            JoinFailurePolicy::ApplyToPrimaryTableOnly,
+        );
+        match bad.decide(
+            &tables,
+            true,
+            "SELECT * FROM orders JOIN users ON 1=1",
+            SqlBackend::Standard,
+        ) {
+            D::Reject {
+                reason: super::RlsRejection::UnsafePolicyColumn { .. },
+            } => {}
+            other => panic!("expected Reject(UnsafePolicyColumn), got {other:?}"),
+        }
     }
 }
