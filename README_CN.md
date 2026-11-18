@@ -255,7 +255,7 @@ DBNexus 遵循零成本抽象原则：特性门控编译期裁剪、无锁热路
 
 ## 🔒 安全
 
-DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上五层：编译时保证（全库 `#![forbid(unsafe_code)]`、驱动互斥 `compile_error!`）、运行时表级 RBAC（JOIN/子查询受检、TTL 权限缓存 + singleflight、令牌桶限流）、注入防护（默认参数化、`SqlParser` 表名提取 + 统一注入引擎、`DdlGuard` AST 校验且 DDL 仅限 admin）、认证与配置安全（JWT 访问/刷新令牌区分校验、bcrypt 密码策略、路径遍历校验）、审计与脱敏（admin 绕过同样记录、`SensitiveMasker`）；供应链安全由 CI 常开的 `cargo deny check` 与 `cargo audit`、CodeQL、Dependabot 及 pre-commit 私钥扫描保障。完整设计见[安全文档](docs/cn/SECURITY.md)。
+DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上五层：编译时保证（全库 `#![forbid(unsafe_code)]`、驱动互斥 `compile_error!`）、运行时表级 RBAC（JOIN/子查询受检、TTL 权限缓存 + singleflight、令牌桶限流）；RLS 多表语句可显式声明 `on_join_failure` 降级为主表谓词注入，其余表由表级 RBAC 兜底，集合操作恒拒绝），注入防护（默认参数化、`SqlParser` 表名提取 + 统一注入引擎、`DdlGuard` AST 校验且 DDL 仅限 admin）、认证与配置安全（JWT 访问/刷新令牌区分校验、bcrypt 密码策略、路径遍历校验）、审计与脱敏（admin 绕过同样记录、`SensitiveMasker`）；供应链安全由 CI 常开的 `cargo deny check` 与 `cargo audit`、CodeQL、Dependabot 及 pre-commit 私钥扫描保障。完整设计见[安全文档](docs/cn/SECURITY.md)。
 
 **漏洞报告**：请勿通过公开 Issue 提交。请使用 GitHub [Security Advisories](https://github.com/Kirky-X/dbnexus/security/policy) 私密通道（"Report a vulnerability"）。响应承诺：48 小时内确认，7 天内给出初步评估。
 

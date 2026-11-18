@@ -264,6 +264,8 @@ The two layers coexist complementarily; this is not a "deprecated" relationship.
 
 ## Core Execution Pipeline
 
+Under `data-protection`, both the raw SQL gate and the row-read gate route RLS through `RlsEngine::decide`, a single decision point that yields `Passthrough` / `OutOfScope` / `Inject` / `InjectDegraded` / `Reject`; degraded JOINs inject the predicate into the primary table only and emit an `rls_degraded` audit event.
+
 ### Procedural Macro System
 
 `#[db_entity]` generates permission-checked CRUD methods at compile time (for the full table of generated methods, see [API Reference](API_REFERENCE.md#db_entity)):

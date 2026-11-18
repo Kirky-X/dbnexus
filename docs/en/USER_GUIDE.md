@@ -1212,6 +1212,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | `permission-engine` | Advanced permission engine: policy decision point, role inheritance, caching and rate limiting |
 | `authentication` | JWT authentication (access/refresh token distinction) + bcrypt password policy |
 | `data-protection` 🆕 | Field-level masking (mask/hash/truncate) and row-level security predicate injection (row-read exit + raw write exit UPDATE/DELETE; single-table statements; multi-table/set operations are rejected fail-closed) |
+### RLS JOIN degradation (`data-protection`)
+
+By default `RlsPolicy` rejects multi-table statements (JOIN/subquery), fail-closed. A policy can explicitly declare `on_join_failure: ApplyToPrimaryTableOnly` (serde key `apply_to_primary_table_only`) to inject the tenant predicate into the primary table (FROM first table) only. Other tables rely on per-table RBAC checks; row-level isolation is **not** applied to them.
+
+- `JoinFailurePolicy::Reject` (default): multi-table statements are denied with `RLS_MULTI_TABLE_UNSUPPORTED`; existing configurations are unchanged.
+- Top-level set operations (UNION/INTERSECT/EXCEPT) are always rejected, regardless of the join policy.
+- INNER predicates in subqueries are not injected; their tables are covered by per-table RBAC only.
+- Each degraded execution emits an `rls_degraded` audit event (operation `Other("rls_degraded")`, severity Low) with a sanitized controlled-table list and no SQL text; a `log::warn` is emitted when no audit feature is compiled in.
+- Configure via `PermissionFacadeConfig::with_rls_policy_join_policy(table, column, value, JoinFailurePolicy::ApplyToPrimaryTableOnly)`; the three-argument `with_rls_policy` keeps the Reject default.
+
 | `permission-facade` 🆕 | RBAC + masking + RLS unified facade, configure once and it applies everywhere (the admin channel skips tenant predicates) |
 | `query-dsl` 🆕 | `q!` type-safe query fragment macro, immune to identifier and value injection |
 | `repository` / `data-api` 🆕 | Generic `Repository<T>`; entity-to-JSON data API gateway |
