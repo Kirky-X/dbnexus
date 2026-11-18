@@ -222,6 +222,10 @@ pub use crate::access::{DryRunReport, OutcomeKind, QueryOutcome, dry_run_policie
 pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 #[cfg(feature = "permission")]
 pub use crate::access::{OriginConstraint, OriginMatch, QueryOrigin};
+#[cfg(feature = "backend-advisor")]
+pub use crate::database::backend_advisor::{
+    BackendAdvice, BackendSuggestion, QueryFeatures, suggest_backend,
+};
 #[cfg(feature = "entity-events")]
 pub use crate::database::entity_events::{
     DbOutboxStore, EntityAction, EntityEvent, EntityEventBus, InMemoryEntityEventBus,

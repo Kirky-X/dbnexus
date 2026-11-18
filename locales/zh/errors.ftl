@@ -392,3 +392,13 @@ introspect-unknown-type = 后端 { $backend } 的未知列类型 '{ $type }'；�
 
 # --- 查询计划守卫 ---
 query-guard-unsupported-backend = 查询计划守卫不支持图数据库后端（Ladybug/Neo4j）
+
+# --- 后端选型理由 ---
+advice-reason-graph-traversal = 检测到图遍历形态（关系/路径语义）
+advice-reason-olap-aggregation = 聚合/分组/窗口函数更适合分析型引擎
+advice-reason-transactional-server = 复杂结构的写入更适合事务型 server 数据库
+advice-reason-bulk-load = 大批量多行插入更适合分析型批量装填路径
+advice-reason-embedded-point-lookup = 单表点查更适合嵌入式数据库
+advice-reason-default-relational = 通用关系型查询；server 数据库是稳妥默认
+advice-reason-mysql-peer = 与 PostgreSQL 同属事务型；按运维生态选择
+advice-verify-scale = 仅为启发式；请结合实际数据规模与索引验证

@@ -45,6 +45,10 @@ pub mod sql_text;
 #[cfg(feature = "data-api")]
 pub mod data_api;
 
+/// 后端选型建议（开发期启发式）
+#[cfg(feature = "backend-advisor")]
+pub mod backend_advisor;
+
 /// 查询 DSL 宏
 #[cfg(feature = "query-dsl")]
 pub mod query_dsl;

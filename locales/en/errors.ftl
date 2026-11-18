@@ -396,3 +396,13 @@ introspect-unknown-type = Unknown column type '{ $type }' for backend { $backend
 
 # --- Query guard ---
 query-guard-unsupported-backend = Query plan guard does not support graph backends (Ladybug/Neo4j)
+
+# --- Backend suggestion reasons ---
+advice-reason-graph-traversal = Graph traversal pattern detected (relationship/path semantics)
+advice-reason-olap-aggregation = Aggregation/grouping/window functions favor an analytical engine
+advice-reason-transactional-server = Writes with complex structure favor a transactional server database
+advice-reason-bulk-load = Large multi-row insert favors an analytical bulk-load path
+advice-reason-embedded-point-lookup = Single-table point lookup favors an embedded database
+advice-reason-default-relational = General relational query; a server database is a safe default
+advice-reason-mysql-peer = Peer to PostgreSQL for transactional workloads; choose by operational ecosystem
+advice-verify-scale = Heuristic only; verify against your data scale and indexes
