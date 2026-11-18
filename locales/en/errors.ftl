@@ -388,3 +388,8 @@ origin-column-denied = Query origin policy removed a denied column
 # --- Policy dry-run ---
 dry-run-missing-grant = add { $table }:{ $action } to role { $role } in candidate policy
 dry-run-role-not-defined = role { $role } is not defined in candidate policy
+
+# --- Schema introspection ---
+introspect-unsupported-backend = Schema introspection is not supported for graph backends (Ladybug/Neo4j)
+introspect-query-failed = Schema introspection query failed
+introspect-unknown-type = Unknown column type '{ $type }' for backend { $backend }; mapped to text

@@ -26,6 +26,8 @@ pub mod converter;
 pub mod differ;
 #[cfg(feature = "migration")]
 pub mod executor;
+#[cfg(feature = "migration")]
+pub mod introspection;
 pub mod metadata;
 pub mod schema;
 /// SQL逆向生成器模块
@@ -43,6 +45,8 @@ pub use converter::*;
 pub use differ::*;
 #[cfg(feature = "migration")]
 pub use executor::*;
+#[cfg(feature = "migration")]
+pub use introspection::introspect_schema;
 pub use metadata::*;
 pub use schema::*;
 #[cfg(feature = "migration")]

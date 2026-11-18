@@ -384,3 +384,8 @@ origin-column-denied = 查询来源策略已移除被拒绝的列
 # --- 策略干跑 ---
 dry-run-missing-grant = 在候选策略中为角色 { $role } 添加 { $table }:{ $action } 授权
 dry-run-role-not-defined = 候选策略中未定义角色 { $role }
+
+# --- Schema 内省 ---
+introspect-unsupported-backend = 图数据库后端（Ladybug/Neo4j）不支持 schema 内省
+introspect-query-failed = schema 内省查询失败
+introspect-unknown-type = 后端 { $backend } 的未知列类型 '{ $type }'；已映射为文本型

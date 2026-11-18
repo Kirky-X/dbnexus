@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 /// 列类型
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ColumnType {
     /// 整数类型
     Integer,
@@ -114,7 +114,7 @@ impl ColumnType {
 }
 
 /// 列定义
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Column {
     /// 列名
     pub name: String,
@@ -135,7 +135,7 @@ pub struct Column {
 }
 
 /// 表定义
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Table {
     /// 表名
     pub name: String,
@@ -152,7 +152,7 @@ pub struct Table {
 }
 
 /// 索引定义
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Index {
     /// 索引名
     pub name: String,
@@ -167,7 +167,7 @@ pub struct Index {
 }
 
 /// 外键定义
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ForeignKey {
     /// 外键名
     pub name: String,
@@ -186,7 +186,7 @@ pub struct ForeignKey {
 }
 
 /// 外键动作
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ForeignKeyAction {
     /// 级联删除/更新
     Cascade,
@@ -213,13 +213,14 @@ impl fmt::Display for ForeignKeyAction {
 }
 
 /// Schema 定义
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Schema {
     /// 数据库类型
     pub database_type: DatabaseType,
     /// 表定义（Vec 保留用于遍历）
     pub tables: Vec<Table>,
-    /// 表索引（HashMap 用于 O(1) 查找）
+    /// 表索引（HashMap 用于 O(1) 查找；反序列化后由 rebuild_index 重建）
+    #[serde(skip)]
     table_index: HashMap<String, usize>,
 }
 
@@ -271,6 +272,16 @@ impl Schema {
     /// 检查表是否存在
     pub fn has_table(&self, name: &str) -> bool {
         self.table_index.contains_key(name)
+    }
+
+    /// 重建表索引（反序列化或外部修改 tables 后调用）
+    pub fn rebuild_index(&mut self) {
+        self.table_index = self
+            .tables
+            .iter()
+            .enumerate()
+            .map(|(i, t)| (t.name.clone(), i))
+            .collect();
     }
 }
 
