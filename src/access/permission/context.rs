@@ -350,6 +350,27 @@ impl PermissionContext {
         &self.check_stats
     }
 
+    /// 角色策略是否已加载/存在（RoleNotDefined 与 TableNotInPolicy 的判据）
+    ///
+    /// 缓存命中即真；miss 时经既有 `get_or_load_policy_coalesced` 合并加载后判存在性。
+    /// 只读查询，不写 `check_stats`，避免污染命中率指标。仅用于拒绝路径（冷路径）。
+    pub async fn has_role_policy(&self, role: &str) -> bool {
+        if role != self.role {
+            return false;
+        }
+        if self
+            .policy_cache
+            .get(&role.to_string())
+            .await
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            return true;
+        }
+        self.get_or_load_policy_coalesced().await.is_some()
+    }
+
     /// 创建新的权限上下文（同步版本，使用默认配置）
     ///
     /// 此方法为需要同步创建权限上下文的场景提供便利，例如在 Session 初始化过程中。
@@ -1521,5 +1542,41 @@ mod tests {
             ])
             .await;
         assert_eq!(results, vec![true, true, false, false]);
+    }
+
+    /// has_role_policy：已加载角色应返回 true
+    #[tokio::test]
+    async fn test_has_role_policy_existing_role() {
+        let config = PermissionConfig {
+            roles: [(
+                "known".to_string(),
+                RolePolicy {
+                    tables: vec![TablePermission {
+                        name: "users".to_string(),
+                        operations: vec![PermissionAction::Select],
+                    }],
+                },
+            )]
+            .into_iter()
+            .collect(),
+        };
+        let ctx = PermissionContext::with_cache_size("known".to_string(), 32)
+            .await
+            .unwrap();
+        ctx.load_policy(&config).await.unwrap();
+
+        assert!(ctx.has_role_policy("known").await);
+        assert!(ctx.check_stats().snapshot().cache_hits == 0);
+    }
+
+    /// has_role_policy：未加载角色应返回 false
+    #[tokio::test]
+    async fn test_has_role_policy_missing_role() {
+        let ctx = PermissionContext::with_cache_size("ghost".to_string(), 32)
+            .await
+            .unwrap();
+
+        assert!(!ctx.has_role_policy("ghost").await);
+        assert!(!ctx.has_role_policy("other").await);
     }
 }
