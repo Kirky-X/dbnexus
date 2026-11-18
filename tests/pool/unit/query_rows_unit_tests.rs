@@ -763,3 +763,125 @@ async fn test_rls_rejects_unparsable_statement() {
 
     let _ = std::fs::remove_file(&db_path);
 }
+
+/// JOIN 降级：ApplyToPrimaryTableOnly 时 execute_raw 放行并记降级审计；
+/// Reject 策略下同样语句被结构化拒绝
+#[cfg(all(
+    feature = "data-protection",
+    feature = "permission",
+    feature = "sql-parser"
+))]
+#[tokio::test]
+async fn test_rls_join_degradation_applies_primary_only() {
+    use dbnexus::access::data_protection::{DataProtection, JoinFailurePolicy, RlsEngine};
+    use std::sync::Arc;
+
+    let db_path = std::env::temp_dir().join(format!(
+        "dbnexus_dp_join_degrade_{}_{}.db",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos()
+    ));
+    let _ = std::fs::remove_file(&db_path);
+    let url = format!("sqlite:{}?mode=rwc", db_path.display());
+    let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
+
+    let admin = pool.get_session("admin").await.unwrap();
+    for ddl in [
+        "CREATE TABLE orders (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL)",
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+    ] {
+        admin.execute_raw_ddl(ddl).await.unwrap();
+    }
+    admin
+        .execute_raw("INSERT INTO orders (id, tenant_id) VALUES (1, 't-100')")
+        .await
+        .unwrap();
+    admin
+        .execute_raw("INSERT INTO users (id, name) VALUES (1, 'alice')")
+        .await
+        .unwrap();
+
+    let mut roles = std::collections::HashMap::new();
+    for role in ["admin", "default"] {
+        roles.insert(
+            role.to_string(),
+            dbnexus::access::permission::RolePolicy {
+                tables: ["orders", "users"]
+                    .iter()
+                    .map(|t| dbnexus::access::permission::TablePermission {
+                        name: (*t).to_string(),
+                        operations: vec![
+                            dbnexus::access::permission::PermissionAction::Select,
+                            dbnexus::access::permission::PermissionAction::Insert,
+                        ],
+                    })
+                    .collect(),
+            },
+        );
+    }
+    pool.set_permission_config(dbnexus::access::permission::PermissionConfig { roles })
+        .await
+        .unwrap();
+
+    let join_sql = "SELECT o.id FROM orders o JOIN users u ON o.id = u.id";
+
+    // Reject 策略（默认）：JOIN 被结构化拒绝
+    pool.set_data_protection(DataProtection {
+        masking: None,
+        rls: Some(Arc::new(RlsEngine::new().policy(
+            "orders",
+            "tenant_id",
+            "t-100",
+        ))),
+    })
+    .await;
+    let reader = pool.get_session("default").await.unwrap();
+    let err = reader
+        .execute_raw(join_sql)
+        .await
+        .expect_err("Reject policy must deny JOIN");
+    match &err {
+        dbnexus::DbError::PermissionDenied { reason } => {
+            assert_eq!(reason.reason_code(), "RLS_MULTI_TABLE_UNSUPPORTED");
+        }
+        _ => panic!("expected structured RLS denial, got {err:?}"),
+    }
+
+    // 降级策略：JOIN 放行 + 审计环记录 rls_degraded
+    dbnexus::database::pool::audit::take_admin_bypass_events();
+    pool.set_data_protection(DataProtection {
+        masking: None,
+        rls: Some(Arc::new(RlsEngine::new().policy_with_join_failure(
+            "orders",
+            "tenant_id",
+            "t-100",
+            JoinFailurePolicy::ApplyToPrimaryTableOnly,
+        ))),
+    })
+    .await;
+    reader
+        .execute_raw(join_sql)
+        .await
+        .expect("degraded JOIN should run");
+    let events = dbnexus::database::pool::audit::take_admin_bypass_events();
+    assert!(
+        events
+            .iter()
+            .any(|e| e.kind == "rls_degraded" && e.table == "orders"),
+        "rls_degraded audit event missing: {events:?}"
+    );
+
+    // admin 会话 JOIN 全路径透传，不记 rls_degraded
+    dbnexus::database::pool::audit::take_admin_bypass_events();
+    admin.execute_raw(join_sql).await.expect("admin bypass");
+    let events = dbnexus::database::pool::audit::take_admin_bypass_events();
+    assert!(
+        !events.iter().any(|e| e.kind == "rls_degraded"),
+        "admin bypass must not emit rls_degraded: {events:?}"
+    );
+
+    let _ = std::fs::remove_file(&db_path);
+}

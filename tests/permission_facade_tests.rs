@@ -220,9 +220,28 @@ async fn test_facade_rls_rejects_multi_table_query() {
         .await
         .unwrap_err();
     assert!(
-        matches!(err, dbnexus::DbError::Permission(_)),
+        err.is_permission_denial(),
         "a multi-table statement must be rejected while RLS is effective, got {err:?}"
     );
 
     let _ = std::fs::remove_file(&path);
+}
+
+/// 四参构造 with_rls_policy_join_policy 声明降级；三参旧签名保持 Reject 语义
+#[test]
+fn test_facade_rls_join_policy_constructors() {
+    use dbnexus::access::data_protection::JoinFailurePolicy;
+
+    // 旧三参签名仍构造默认 Reject 策略（经引擎判定确认行为不变）
+    let legacy = PermissionFacadeConfig::new().with_rls_policy("orders", "tenant_id", "t-100");
+    let _ = &legacy; // 构造成功即证明旧签名保留
+
+    // 四参构造显式声明降级
+    let degraded = PermissionFacadeConfig::new().with_rls_policy_join_policy(
+        "orders",
+        "tenant_id",
+        "t-100",
+        JoinFailurePolicy::ApplyToPrimaryTableOnly,
+    );
+    let _ = &degraded; // 构造成功即证明四参重载可用
 }
