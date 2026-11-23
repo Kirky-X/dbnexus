@@ -8,16 +8,6 @@ db-urls = ["https://github.com/RustSec/advisory-db"]
 yanked = "warn"
 # 按仓库填:传递依赖 RUSTSEC 豁免(每项须注释原因)
 ignore = [
-    # neo4rs 传递依赖 unmaintained(2026-08 核实,均为 neo4rs → 传递引入):
-    #   RUSTSEC-2025-0012 (backoff) — neo4rs 依赖,无安全升级路径
-    #   RUSTSEC-2024-0384 (instant) — backoff → instant,无安全升级路径
-    #   RUSTSEC-2024-0436 (paste) — neo4rs 依赖,可用 pastey 替代但需 neo4rs 侧迁移
-    #   RUSTSEC-2025-0134 (rustls-pemfile) — neo4rs/rustls-native-certs 依赖,建议迁移至 rustls-pki-types
-    # 待 neo4rs 上游迁移后自然消除
-    "RUSTSEC-2025-0012",
-    "RUSTSEC-2024-0384",
-    "RUSTSEC-2024-0436",
-    "RUSTSEC-2025-0134",
     # RUSTSEC-2026-0440 (astral-tokio-tar unmaintained) — testcontainers 0.28
     # dev-dependency 传递引入（testcontainers 已是 crates.io 最新版，无升级路径）。
     # 仅测试链路（postgres/mysql testcontainers 集成测试），不进发布依赖图；
